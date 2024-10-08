@@ -1,0 +1,36 @@
+[33mcommit ef0a23d5dae49c3d55af5265fd64255a9f9183c4[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Merge: 79929da ec80998
+Author: Adam <adameyileten2@gmail.com>
+Date:   Sun Jun 30 23:44:43 2024 +1000
+
+    Resolved merge conflict in frontend/src/api.js
+
+[33mcommit 79929da771572ce7e3908626f6e562de595be2ef[m
+Author: Adam <adameyileten2@gmail.com>
+Date:   Sun Jun 30 23:38:56 2024 +1000
+
+    Added Edit Note Function in Note.jsx component
+
+[33mcommit ec809982c79664ee79ea43679bfa9c7e8179e3d3[m
+Author: Adam <130415173+Adameyi@users.noreply.github.com>
+Date:   Fri Jun 28 01:07:25 2024 +1000
+
+    Update api.js
+
+[33mcommit e3b169580d46cfafac18545eb9ce2c14d1a6d68e[m
+Author: Adam <adameyileten2@gmail.com>
+Date:   Fri Jun 28 00:58:27 2024 +1000
+
+    add backend url
+
+[33mcommit d3a5766b4aa39edef46179f4d85e24f3ccbdb2da[m
+Author: Adam <adameyileten2@gmail.com>
+Date:   Thu Jun 27 23:47:40 2024 +1000
+
+    Moved .choreo folder to the correct directory
+
+[33mcommit 660267e012475c89d08ba72661a9b3b60bbc9927[m
+Author: Adam <adameyileten2@gmail.com>
+Date:   Thu Jun 27 22:15:12 2024 +1000
+
+    first commit
