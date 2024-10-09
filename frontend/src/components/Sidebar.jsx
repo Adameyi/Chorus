@@ -1,10 +1,12 @@
 import React from 'react'
 import '../App.css';
-
+import {useLocation,  Link} from 'react-router-dom'
 import logo from '../assets/images/logo.png'
 import userPlaceholder from '../assets/images/userPlaceholder.png'
 
 function Sidebar() {
+  const location = useLocation()
+
   return (
     <div className='bg-teal-600 m-4 p-6 w-24 h-screen-min flex flex-col justify-center items-center text-white rounded-2xl gap-4'>
       <img src={logo} alt="Chorus Logo" className='h-14 w-12'></img>
