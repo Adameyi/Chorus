@@ -1,5 +1,5 @@
 import '../styles/index.css';
-
+import React, { useState } from 'react';
 import groupChatImage from '../assets/images/groupChatImage.png'
 import userProfile2 from '../assets/images/profile2.png'
 import Sidebar from '../components/Sidebar'
@@ -10,6 +10,15 @@ import UserProfile from '../components/UserProfile';
 import GroupInfo from '../components/GroupInfo';
 
 function Chat() {
+    const [showProfile, setShowProfile] = useState(false)
+    const [showGroupChat, setShowGroupChat] = useState(true)
+    const [selectedUser, setSelectedUser] = useState(null)
+
+    const handleProfileClick = (userData) => {
+        setSelectedUser(userData)
+        setShowProfile(true)
+    }
+
     return (
         <div className="grid grid-cols-4">
 
@@ -176,7 +185,7 @@ function Chat() {
                     <MobileSidebar />
                     <div className="flex flex-row justify-between items-center shadow-xl h-24 w-full">
                         <div className="flex flex-row justify-between gap-3 py-4 px-2">
-                            <img src={groupChatImage} alt="groupChat" className="h-16 w-16 rounded-full"></img>
+                            <img src={groupChatImage} onClick={() => setShowGroupChat(true)} alt="groupChat" className="h-16 w-16 rounded-full"></img>
                             <div>
                                 <h1 className="font-bold sm:text-2xl">WW - Risk Management </h1>
                                 <p className="flex flex-row text-slate-500">6 Members <span className="sm:flex hidden">(3 Online)</span> </p>
@@ -231,13 +240,19 @@ function Chat() {
 
                     </div>
                 </div>
-                <ChatBox />
+                <ChatBox onProfileClick={handleProfileClick}/>
                 <MessageBar />
             </div>
             {/* Right Panel */}
             <div className='sm:block hidden bg-slate-200'>
-                <UserProfile />
-                <GroupInfo/>
+                <UserProfile 
+                    showProfile={showProfile}
+                    setShowProfile={setShowProfile}
+                    userData={selectedUser}/>
+                <GroupInfo
+                    showGroupChat={showGroupChat}
+                    setShowGroupChat={setShowGroupChat}
+                />
             </div>
         </div>
     );

@@ -2,14 +2,25 @@ import React from 'react'
 import UserSender from '../assets/images/profile1.png'
 import UserReceiver from '../assets/images/profile2.png'
 
-function ChatBox() {
+function ChatBox({onProfileClick}) {
     return (
         <div className='p-2 sm:h-full h-[75vh] flex flex-col justify-end overflow-hidden'>
             <div className='overflow-y-auto h-full'>
             {/* End: Right-Side Chat (Receiver) */}
             {/* Left-Side Chat (Sender) */}
             <div className='flex flex-row gap-2 text-sm mt-4'>
-                <img src={UserSender} alt="Profile 1" className='w-16 h-16 rounded-lg' />
+                <img 
+                src={UserSender} 
+                alt="Profile 1"
+                className='w-16 h-16 rounded-lg' 
+                onClick={() => onProfileClick({
+                    name: 'David Writer',
+                    role: 'Content Writer @ Covert Studios',
+                    phone: '(+02) 023 456 789',
+                    email: 'david.writer@coverts.com',
+                    image: UserSender
+                })}
+                />
                 {/* Message Box */}
                 <div className='flex flex-col gap-2'>
                     <div className='bg-slate-200 py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl'>
@@ -69,13 +80,35 @@ function ChatBox() {
                     </div>
                     {/* ------ */}
                 </div>
-                <img src={UserSender} alt="Profile 1" className='w-16 h-16 rounded-lg' />
+                <img 
+                src={UserSender} 
+                alt="Profile 1"
+                className='w-16 h-16 rounded-lg' 
+                onClick={() => onProfileClick({
+                    name: 'David Writer',
+                    role: 'Content Writer @ Covert Studios',
+                    phone: '(+02) 023 456 789',
+                    email: 'david.writer@coverts.com',
+                    image: UserSender
+                })}
+                />
             </div>
             {/* End: Right-Side Chat (Receiver) */}
 
             {/* Left-Side Chat (Sender) */}
             <div className='flex flex-row gap-2 text-sm mt-4'>
-                <img src={UserSender} alt="Profile 1" className='w-16 h-16 rounded-lg' />
+            <img 
+                src={UserSender} 
+                alt="Profile 1"
+                className='w-16 h-16 rounded-lg' 
+                onClick={() => onProfileClick({
+                    name: 'Amina Kone',
+                    role: 'Content Writer @ Covert Studios',
+                    phone: '(+02) 023 456 789',
+                    email: 'david.writer@coverts.com',
+                    image: UserSender
+                })}
+            />
                 {/* Message Box */}
                 <div className='flex flex-col gap-2'>
                     <div className='bg-slate-200 py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl'>
