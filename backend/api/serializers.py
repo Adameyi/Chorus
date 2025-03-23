@@ -6,7 +6,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "password"]
-        #Accept password when creating a user, but do not return it when giving info about user.
+        # Accept password when creating a user, but do not return it when giving info about user.
         extra_kwargs = {"password": {"write_only": True}}
     
     def create(self, validated_data):
@@ -16,5 +16,5 @@ class UserSerializer(serializers.ModelSerializer):
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Task
-        fields = ["id", "user", "title", "description", "column", "date", "attachments", "comments", "tags", "column_ref"]
+        fields = ["id", "user", "title", "description", "column", "date", "attachments", "comments", "tags", "due_date", "order"]
         read_only_fields = ['user']

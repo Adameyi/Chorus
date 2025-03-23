@@ -1,10 +1,11 @@
 import axios from "axios";
 import { ACCESS_TOKEN } from "../constants";
 
-const apiUrl = ""
+const apiUrl = "http://localhost:8000/api";
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL : apiUrl,
+    withCredentials: true,
 });
 
 api.interceptors.request.use(
@@ -22,21 +23,20 @@ api.interceptors.request.use(
 
 export default api;
 
-//Task-Related API func
+// Task-Related API functions
 export const taskAPI = {
-    //CREATE new task
-    createTask: () => api.post('/tasks/', taskData),
+    // CREATE new task
+    createTask: (taskData) => api.post('/api/tasks/', taskData),
 
-    //RETRIEVE all tasks
-    getTask: () => api.get('/tasks/'),
+    // RETRIEVE all tasks
+    getTasks: () => api.get('/api/tasks/'),
 
-    //UPDATE task
-    updateTask: () => api.put('/tasks/${taskId}/', taskData),
+    // UPDATE task
+    updateTask: (taskId, taskData) => api.put(`/api/tasks/${taskId}`, taskData),
 
-    //DELETE tasks
-    deleteTask: () => api.delete('/tasks/${taskId}'),
+    // DELETE task
+    deleteTask: (taskId) => api.delete(`/api/tasks/${taskId}`),
 
-    //Relocate Task
-    moveTask: (taskId, newColumn) => api.patch(`/tasks/${taskId}/`, {column: newColumn})
-}
-
+    // RELOCATE task
+    moveTask: (taskId, newColumn) => api.patch(`/api/tasks/${taskId}`, { column: newColumn }),
+};

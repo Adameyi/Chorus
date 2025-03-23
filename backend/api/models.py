@@ -30,7 +30,6 @@ class Task(models.Model):
     attachments = models.IntegerField(default=0, validators=[MinValueValidator(0)])
     comments =  models.IntegerField(default=0, validators=[MinValueValidator(0)])
     tags = models.JSONField(default=list)
-    column_ref = models.ForeignKey(Column, on_delete=models.CASCADE, related_name='tasks')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     due_date = models.DateTimeField(blank=True, null=True)

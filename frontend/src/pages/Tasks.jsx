@@ -17,7 +17,8 @@ function Tasks() {
         date: '',
         due_date: new Date().toISOString(),
         tags: [],
-        order: 0
+        order: 0,
+        participants: []
     })
 
     //Fetch tasks when component mounts
@@ -40,14 +41,57 @@ function Tasks() {
     }
 
     //Add a New Task
-    const handleAddTask = async (taskData) => {
+    const handleAddTask = async (event) => {
+        event.preventDefault();
         try {
-            const newTask = await taskAPI.create(taskData)
-            setTasks(prevTasks => [...prevTasks, newTask])
+            const taskData = {
+                title: formData.title,
+                description: formData.description,
+                column: formData.column,
+                date: formData.date,
+                due_date: formData.due_date,
+                tags: formData.tags,
+                order: formData.order,
+            };
+    
+            // Log to ensure taskData is correctly constructed
+            console.log('taskData:', taskData);
+    
+            const newTask = await taskAPI.createTask(taskData);
+            console.log('New Task:', newTask);
+            setTasks((prevTasks) => Array.isArray(prevTasks) ? [...prevTasks, newTask] : [newTask]);
+
+            // Reset form and close modal after successful creation
+            resetForm();
+            closeAddTask();
         } catch (error) {
-            setError('Failed to create tasks. Please try again later.')
+            console.error('Error adding task:', error);
+            setError('Failed to create task. Please try again later.');
         }
-    }
+    };
+
+    // Reset form to initial state
+    const resetForm = () => {
+        setFormData({
+            title: '',
+            description: '',
+            column: 'To Do',
+            date: '',
+            due_date: new Date().toISOString(),
+            tags: [],
+            order: 0,
+            participants: []
+        });
+    };
+
+    // Handle input changes for all form fields
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
 
     //Relocate task to different column
     const handleMoveTask = async (taskId, newColumn) => {
@@ -75,23 +119,79 @@ function Tasks() {
         }
     }
 
-    const handleDateTimeChange = (date, time) => {
-        // Parse date and time together into ISO string for due_date
-        const [year, month, day] = date.split('-')
-        const [hours, minutes] = time.split(':')
-        const due_date = new Date(year, month - 1, days, hours, minutes)
-    
-        setFormData(prev => ({
-            ...prev,
-            due_date: due_date.toISOString()
-        }))
+    const handleDateTimeChange = (e) => {
+        const { name, value } = e.target;
+        
+        if (name === 'date') {
+            setFormData(prev => ({
+                ...prev,
+                date: value
+            }));
+        } else if (name === 'time') {
+            // Combine date and time to update due_date
+            const dateTime = combineDateTime(formData.date, value);
+            setFormData(prev => ({
+                ...prev,
+                due_date: dateTime.toISOString()
+            }));
+        }
     }
 
-    const handleTagChange = (tags) => {
+    const combineDateTime = (dateStr, timeStr) => {
+        // Parse the date and time strings
+        const [monthName, day] = dateStr.split(' ');
+        const monthIndex = months.indexOf(monthName);
+        const year = new Date().getFullYear();
+        
+        // Parse time (e.g., "6:00AM")
+        let hours = parseInt(timeStr.match(/\d+/)[0]);
+        const minutes = timeStr.includes(':') ? parseInt(timeStr.split(':')[1].match(/\d+/)[0]) : 0;
+        const isPM = timeStr.includes('PM');
+        
+        // Convert to 24-hour format
+        if (isPM && hours < 12) hours += 12;
+        if (!isPM && hours === 12) hours = 0;
+        
+        return new Date(year, monthIndex, parseInt(day), hours, minutes);
+    }
+
+    // Add a participant
+    const handleAddParticipant = (e) => {
+        e.preventDefault();
+        const participant = formData.newParticipant;
+        if (participant && !formData.participants.includes(participant)) {
+            setFormData(prev => ({
+                ...prev,
+                participants: [...prev.participants, participant],
+                newParticipant: ''
+            }));
+        }
+    }
+
+    // Add a tag
+    const handleAddTag = (tag) => {
+        if (tag && !formData.tags.includes(tag)) {
+            setFormData(prev => ({
+                ...prev,
+                tags: [...prev.tags, tag]
+            }));
+        }
+    }
+
+    // Remove a participant
+    const handleRemoveParticipant = (participant) => {
         setFormData(prev => ({
             ...prev,
-            tags: tags
-        }))
+            participants: prev.participants.filter(p => p !== participant)
+        }));
+    }
+
+    // Remove a tag
+    const handleRemoveTag = (tag) => {
+        setFormData(prev => ({
+            ...prev,
+            tags: prev.tags.filter(t => t !== tag)
+        }));
     }
 
     const openAddTask = () => {
@@ -100,6 +200,7 @@ function Tasks() {
 
     const closeAddTask = () => {
         setAddTaskVisible(false)
+        resetForm();
     }
 
     const columns = ['To Do', 'In Progress', 'Completed']
@@ -166,17 +267,15 @@ function Tasks() {
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
                             </svg>
-
-
                             Filter & Sort
                         </button>
-                        <button className='flex flex-row gap-2 text-gray-500 border-2 border-slate-400  rounded-xl p-2' onClick={handleAddTask}>
+                        <button className='flex flex-row gap-2 text-gray-500 border-2 border-slate-400 rounded-xl p-2' onClick={openAddTask}>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                             </svg>
                             New Task
                         </button>
-                        <button className='flex flex-row gap-2 text-gray-500 border-2 border-slate-400  rounded-xl p-2'>
+                        <button className='flex flex-row gap-2 text-gray-500 border-2 border-slate-400 rounded-xl p-2'>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                             </svg>
@@ -209,8 +308,8 @@ function Tasks() {
                 {/* Task Columns + Tasks End */}
 
                 {/* Add Task Modal */}
-                <div className={` absolute flex flex-row right-10 bottom-10 bg-teal-500 rounded-2xl ${addTask ? 'sm:h-[75vh]': 'hidden'} `}>
-                    <h1 className='text-white robot-bold text-3xl m-4'>New  <br />Task</h1>
+                <div className={`absolute flex flex-row right-10 bottom-10 bg-teal-500 rounded-2xl ${addTaskVisible ? 'sm:h-[75vh]': 'hidden'}`}>
+                    <h1 className='text-white robot-bold text-3xl m-4'>New<br />Task</h1>
                     <div className='bg-white'>
                         
                         {/* Close Button */}
@@ -218,20 +317,43 @@ function Tasks() {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
 
-                        <form action="" className='flex flex-col p-4 pt-8 gap-2  '>
+                        <form onSubmit={handleAddTask} className='flex flex-col p-4 pt-8 gap-2'>
                             <label htmlFor="title">Title:</label>
-                            <input type="text" id='title' placeholder='Add Task Title' className='border-b-2 bg-gray-100' />
+                            <input 
+                                type="text" 
+                                id='title' 
+                                name='title'
+                                placeholder='Add Task Title' 
+                                className='border-b-2 bg-gray-100'
+                                value={formData.title}
+                                onChange={handleInputChange}
+                                required
+                            />
+                            
                             <label htmlFor="column">Column:</label>
                             <div>
-                                <select className="m-1 bg-teal-500 text-white p-1" name="selectedFruit" defaultValue="To Do">
+                                <select 
+                                    className="m-1 bg-teal-500 text-white p-1" 
+                                    name="column" 
+                                    value={formData.column}
+                                    onChange={handleInputChange}
+                                >
                                     <option value="To Do">To Do</option>
                                     <option value="In Progress">In Progress</option>
                                     <option value="Completed">Completed</option>
                                 </select>
                             </div>
-                            <label htmlFor="Date">Date:</label>
+                            
+                            <label htmlFor="date">Date:</label>
                             <div>
-                                <select className="m-1 bg-teal-500 text-white p-1" name="Date" defaultValue="January 1">
+                                <select 
+                                    className="m-1 bg-teal-500 text-white p-1" 
+                                    name="date" 
+                                    value={formData.date}
+                                    onChange={handleDateTimeChange}
+                                    required
+                                >
+                                    <option value="" disabled>Select date</option>
                                     {months.flatMap(month =>
                                         days.map(day => (
                                             <option key={`${month} ${day}`} value={`${month} ${day}`}>
@@ -240,7 +362,12 @@ function Tasks() {
                                         ))
                                     )}
                                 </select>
-                                <select className="m-1 bg-teal-500 text-white p-1" name="time" defaultValue="6:00AM">
+                                <select 
+                                    className="m-1 bg-teal-500 text-white p-1" 
+                                    name="time" 
+                                    defaultValue="6:00AM"
+                                    onChange={handleDateTimeChange}
+                                >
                                     {[
                                         "12:00AM", "12:30AM", "1:00AM", "1:30AM", "2:00AM", "2:30AM", "3:00AM", "3:30AM",
                                         "4:00AM", "4:30AM", "5:00AM", "5:30AM", "6:00AM", "6:30AM", "7:00AM", "7:30AM",
@@ -253,22 +380,84 @@ function Tasks() {
                                     ))}
                                 </select>
                             </div>
+                            
                             <label htmlFor="participants">Participants:</label>
                             <div className='flex justify-between'>
-                            <input type="text" id='participants' name='participants' placeholder='Add User' className='border-b-2 bg-gray-100 w-40' />
-                            <button className='bg-teal-500 p-1 rounded-lg'>Add</button>
+                                <input 
+                                    type="text" 
+                                    id='newParticipant' 
+                                    name='newParticipant' 
+                                    placeholder='Add User' 
+                                    className='border-b-2 bg-gray-100 w-40'
+                                    value={formData.newParticipant || ''}
+                                    onChange={handleInputChange}
+                                />
+                                <button 
+                                    className='bg-teal-500 p-1 rounded-lg'
+                                    onClick={handleAddParticipant}
+                                    type="button"
+                                >
+                                    Add
+                                </button>
                             </div>
-                            <Tag/>
-                            <label htmlFor="participants">Tags:</label>
-                            <input type="text" id='participants' name='participants' placeholder='Add User' className='border-b-2 bg-gray-100 w-40' />
-                            <div className='flex flex-row gap-2'>
-                            <div className='bg-teal-100 p-1 rounded-lg w-28'>Jane Doe</div>
-                            <div className='bg-teal-100 p-1 rounded-lg w-28'>John Smith</div>
+                            
+                            <div className='flex flex-row gap-2 flex-wrap'>
+                                {formData.participants.map((participant, index) => (
+                                    <div key={index} className='bg-teal-100 p-1 rounded-lg'>
+                                        {participant}
+                                        <button 
+                                            type="button"
+                                            className="ml-2 text-red-500"
+                                            onClick={() => handleRemoveParticipant(participant)}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                                {formData.participants.length === 0 && (
+                                    <>
+                                    </>
+                                )}
                             </div>
-                            <label htmlFor="Description">Description:</label>
-                            <textarea name="Description" id="Description" placeholder="Add Description" className="border-b-2 bg-gray-100" rows="5"></textarea>
+                            
+                            <Tag onTagSelect={handleAddTag} />
+                            
+                            <label htmlFor="tags">Tags:</label>
+                            <div className='flex flex-row gap-2 flex-wrap'>
+                                {formData.tags.map((tag, index) => (
+                                    <div key={index} className='bg-teal-100 p-1 rounded-lg'>
+                                        {tag}
+                                        <button 
+                                            type="button"
+                                            className="ml-2 text-red-500"
+                                            onClick={() => handleRemoveTag(tag)}
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <label htmlFor="description">Description:</label>
+                            <textarea 
+                                name="description" 
+                                id="description" 
+                                placeholder="Add Description" 
+                                value={formData.description}
+                                onChange={handleInputChange}
+                                className="border-b-2 bg-gray-100" 
+                                rows="5"
+                            >
+                            </textarea>
+                            
                             <div className='flex justify-end'>
-                            <button className='p-1 bg-teal-500 w-24 text-white rounded-lg'> Add Task </button>
+                                <button 
+                                    type="submit"
+                                    className='p-1 bg-teal-500 w-24 text-white rounded-lg'
+                                    onClick={closeAddTask}
+                                >
+                                    Add Task
+                                </button>
                             </div>
                         </form>
                     </div>
