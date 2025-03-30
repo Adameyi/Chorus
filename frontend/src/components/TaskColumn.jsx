@@ -3,7 +3,7 @@ import userProfile1 from '../assets/images/profile1.png'
 import { taskAPI } from '../services/api'
 import { use } from 'react'
 
-function TaskColumn({ columnTitle, columnTasks, handleAddTask }) {
+function TaskColumn({ columnTitle, columnTasks, handleAddTask, onDeleteTask }) {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -105,7 +105,7 @@ function TaskColumn({ columnTitle, columnTasks, handleAddTask }) {
                 <li 
                   className="px-4 py-2 text-sm text-red-600 hover:bg-gray-100 cursor-pointer flex items-center"
                   onClick={() => {
-                    onDelete(task.id);
+                    onDeleteTask(task.id);
                     setOpenDropdownId(false);
                   }}
                 >

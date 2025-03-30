@@ -30,8 +30,8 @@ function Tasks() {
     const loadTasks = async () => {
         try {
             setLoading(true)
-            const tasksData = await taskAPI.getTasks();
-            setTasks(tasksData);
+            const response = await taskAPI.getTasks();
+            setTasks(response.data);
         } catch (error) {
             setError('Failed to load tasks. Please try again later.')
             console.error('Error Fetching Tasks', error)
@@ -348,7 +348,8 @@ function Tasks() {
                             <div>
                                 <select 
                                     className="m-1 bg-teal-500 text-white p-1" 
-                                    name="date" 
+                                    name="date"
+
                                     value={formData.date}
                                     onChange={handleDateTimeChange}
                                     required
@@ -454,7 +455,6 @@ function Tasks() {
                                 <button 
                                     type="submit"
                                     className='p-1 bg-teal-500 w-24 text-white rounded-lg'
-                                    onClick={closeAddTask}
                                 >
                                     Add Task
                                 </button>

@@ -35,7 +35,7 @@ export const taskAPI = {
     updateTask: (taskId, taskData) => api.put(`/api/tasks/${taskId}`, taskData),
 
     // DELETE task
-    deleteTask: (taskId) => api.delete(`/api/tasks/${taskId}`),
+    deleteTask: (taskId) => api.delete(`/api/tasks/${taskId}/`),
 
     // RELOCATE task
     moveTask: (taskId, newColumn) => api.patch(`/api/tasks/${taskId}`, { column: newColumn }),
