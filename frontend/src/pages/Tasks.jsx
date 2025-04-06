@@ -53,13 +53,13 @@ function Tasks() {
                 tags: formData.tags,
                 order: formData.order,
             };
-    
+            const response = await taskAPI.createTask(taskData);
+
             // Log to ensure taskData is correctly constructed
             console.log('taskData:', taskData);
-    
-            const newTask = await taskAPI.createTask(taskData);
-            console.log('New Task:', newTask);
-            setTasks((prevTasks) => Array.isArray(prevTasks) ? [...prevTasks, newTask] : [newTask]);
+            console.log('New Task:', response.data);
+            // setTasks((prevTasks) => Array.isArray(prevTasks) ? [...prevTasks, newTask] : [newTask]);
+            setTasks((prevTasks) => [...prevTasks, response.data]);
 
             // Reset form and close modal after successful creation
             resetForm();
@@ -93,12 +93,28 @@ function Tasks() {
         }));
     };
 
+    //Update Task
+    const handleUpdateTask = async (taskId, updatedData) => {
+        try {
+            const response = await taskAPI.updateTask(taskId, updatedData)
+            setTasks(prevTasks =>
+                prevTasks.map(task => 
+                    task.id === taskId ? response.data : task
+                )
+            )
+        } catch (error) {
+            setError('Failed to update task. Please try again later')
+            console.error('Error updating task:', error)
+        }
+    }
+
     //Relocate task to different column
     const handleMoveTask = async (taskId, newColumn) => {
         try {
-            await taskAPI.moveTask(taskId, newColumn)
+            const response = await taskAPI.moveTask(taskId, newColumn)
             setTasks(prevTasks =>
-                prevTasks.map(task => task.id === taskId ? {...task, column: newColumn} : task)
+                // prevTasks.map(task => task.id === taskId ? {...task, column: newColumn} : task)
+                prevTasks.map(task => task.id === taskId ? response.data : task)
             )
         } catch (error) {
             setError('Failed to move task. Please try again later')

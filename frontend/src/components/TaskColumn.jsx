@@ -1,12 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react'
 import userProfile1 from '../assets/images/profile1.png'
 import { taskAPI } from '../services/api'
-import { use } from 'react'
 
-function TaskColumn({ columnTitle, columnTasks, handleAddTask, onDeleteTask }) {
+function TaskColumn({ columnTitle, tasks, handleAddTask, onDeleteTask, onEdit }) {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
-
   const [openDropdownId, setOpenDropdownId] = useState(null)
 
   const dropdownRef = useRef(null)
@@ -29,22 +27,22 @@ function TaskColumn({ columnTitle, columnTasks, handleAddTask, onDeleteTask }) {
 
   },[])
 
-  useEffect(() => {
-    // Fetch tasks when component mounts
-    const loadTasks = async () => {
-      try {
-        setLoading(true)
-        const response = await taskAPI.getTasks();
-        setTasks(response.data)
-      } catch (error) {
-        console.error('Error fetching tasks:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
+  // useEffect(() => {
+  //   // Fetch tasks when component mounts
+  //   const loadTasks = async () => {
+  //     try {
+  //       setLoading(true)
+  //       const response = await taskAPI.getTasks();
+  //       setTasks(response.data)
+  //     } catch (error) {
+  //       console.error('Error fetching tasks:', error)
+  //     } finally {
+  //       setLoading(false)
+  //     }
+  //   }
 
-    loadTasks()
-  }, [])
+  //   loadTasks()
+  // }, [])
 
   const filteredTasks = tasks.filter(task => task.column === columnTitle)
 
@@ -80,7 +78,7 @@ function TaskColumn({ columnTitle, columnTasks, handleAddTask, onDeleteTask }) {
       ) : (
         filteredTasks.length > 0 ? (
           filteredTasks.map((task) => (
-            <div key={task.id || task.title} className='bg-slate-300 p-4 mt-2 rounded-2xl'>
+            <div key={task.id || task._id || task.title} className='bg-slate-300 p-4 mt-2 rounded-2xl'>
               <div key={task.id} className='bg-slate-300 p-4 mt-2 rounded-2xl'>
                 <div className='flex flex-row justify-between'>
                   <h1 className='roboto-medium text-lg'>{task.title}</h1>
@@ -95,7 +93,7 @@ function TaskColumn({ columnTitle, columnTasks, handleAddTask, onDeleteTask }) {
               <ul className="py-1">
                 <li 
                   className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer flex items-center"
-                  onClick={() => {onEdit(task); setOpenDropdownId(null);}}
+                  onClick={() => {onEdit && onEdit(task); setOpenDropdownId(null);}}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -106,7 +104,7 @@ function TaskColumn({ columnTitle, columnTasks, handleAddTask, onDeleteTask }) {
                   className="px-4 py-2 text-sm text-red-600 hover:bg-gray-100 cursor-pointer flex items-center"
                   onClick={() => {
                     onDeleteTask(task.id);
-                    setOpenDropdownId(false);
+                    setOpenDropdownId(null);
                   }}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
