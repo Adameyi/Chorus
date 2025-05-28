@@ -1,9 +1,12 @@
 from django.shortcuts import render
 from django.contrib.auth.models import User
-from rest_framework import generics, permissions
-from .serializers import UserSerializer, TaskSerializer
+from django.db.models import Q
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from .serializers import UserSerializer, TaskSerializer, UserBasicSerializer, MessageSerializer, ChatRoomSerializer, EmoteSerializer, FriendRequestSerializer, FriendSerializer
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .models import Task, Column
+from .models import Task, Column, FriendRequest, Friends, Blocked, ChatRoom, Message, Emotes
 
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all() #List all users to ensure duplicates do not exist.
@@ -26,3 +29,185 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return Task.objects.filter(user=self.request.user)
+    
+# User Search + Profile
+class UserSearchView(generics.ListAPIView):
+    serializer_class = UserBasicSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        query = self.request.query_params.get('q', None)
+        if query:
+            return User.objects.filter(username__icontains=query).exclude(id=self.request.user.id)
+        return User.objects.none() 
+    
+#Friend requests
+class FriendRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = FriendRequestSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        return FriendRequest.objects.filter(
+            Q(sender=user) | Q(receiver=user)
+        )
+        
+    #Accept/Reject Friend Request Handler
+    @action(detail=True, methods=['post'])
+    def respond(self, request, pk=None):
+        friend_request = self.get_object()
+        
+        # Only the receiver is able to respond to friend request.
+        if friend_request.receiver != request.user:
+            return Response (
+                {
+                    "detail" : "You cannot respond to this request"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        if friend_request.status != 'pending':
+            return Response(
+                {
+                    "detail" : "This request has already been responded to"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+    
+        action = request.data.get('action')
+        
+        if action == 'accept':
+            friend_request.status = 'accepted'
+            friend_request.save()
+            
+            #Create friendship relationship (2-Way).
+            Friends.objects.create(user=friend_request.sender, friend=friend_request.receiver)
+            Friends.objects.create(friend=friend_request.sender, user=friend_request.receiver)
+            
+            return Response({'status':'accepted'})
+            
+        elif action == 'reject':
+            friend_request.status = 'rejected'
+            friend_request.save()
+            
+            return Response({'status':'rejected'})
+        
+        return Response(
+            {"detail": "Invalid Action. Select either 'accept' or 'reject"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+#Friends List
+class FriendsListView(generics.ListAPIView):
+    serializer_class = FriendSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return Friends.objects.filter(user=self.request.user)
+
+#ChatRoom and Messages
+class ChatRoomViewSet(viewsets.ModelViewSet):
+    serializer_class = ChatRoomSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return ChatRoom.objects.filter(participants=self.request.user)
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+    
+    # Get ALL messages in a chat  room
+    @action(detail=True, methods=['get'])
+    def get_messages(self, request, pk=None):
+        chat_room = self.get_object()
+        
+        #Retrieve all messsages of current chat room.
+        messages = Message.objects.filter(chat_room=chat_room)
+
+        # Mark messages as read (Except sender -> sender).
+        unread_messages = messages.filter(is_read=False).exclude(sender=request.user)
+        unread_messages.update(is_read=True)
+
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    
+    # Send message to the chat room
+    @action(detail=True, methods=['post'])
+    def send_message(self, request, pk=None):
+        chat_room = self.get_object()
+        content = request.data.get('content')
+        
+        if not content:
+            return Response(
+                {
+                    "detail" : "Message content is required"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        message = Message.objects.create(
+            chat_room=chat_room,
+            sender=request.user,
+            content=content
+        )
+        
+        serializer = MessageSerializer(message)
+        return Response(serializer.data)
+     
+    # Add/Annotate Emote to a message
+    @action(detail=True, methods=['post']) 
+    def add_emote(self, request, pk=None, message_id=None):
+        
+        chat_room = self.get_object()
+        
+    #Remove Emote from a message
+        
+    # Create DM with friend 
+    @action(detail=False, methods=['post'])
+    def direct(self, request):
+        friend_id = request.data.get('friend_id')
+        
+        if not friend_id:
+            return Response(
+                {
+                    "detail" : "Friend ID is required",
+                },
+            status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            friend = User.objects.get(id=friend_id)
+        except User.DoesNotExist:
+            return Response(
+                {
+                    "detail" : "User not found"
+                },
+                status = status.HTTP_404_NOT_FOUND
+            )
+            
+        # Verify if they're friends
+        if not Friends.objects.filter(user=request.user, friend=friend).exists():
+            return Response(
+                {
+                    "detail" : "This user isn't in your friends list"
+                },
+                status = status.HTTP_403_FORBIDDEN
+            )
+            
+        #Check if a DM chat already exists
+        existing_chats = ChatRoom.objects.filter(
+            participants=request.user,
+            is_group_chat=False
+        ).filter(participants=friend)
+        
+        if existing_chats.exists():
+            serializer = self.get_serializer(existing_chats.first())
+            return Response(serializer.data)
+        
+        # Create a new DM
+        chat_room = ChatRoom.objects.create(is_group_chat=False)
+        chat_room.participants.add(request.user, friend)
+        
+        serializer = self.get_serializer(chat_room)
+        return Response(serializer.data)

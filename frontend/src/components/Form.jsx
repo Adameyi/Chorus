@@ -1,6 +1,6 @@
 import { useState } from "react";
 import api from "../services/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { ACCESS_TOKEN, REFRESH_TOKEN } from "../constants";
 import "../styles/index.css";
 import Indicator from "./Indicator";
@@ -11,7 +11,8 @@ function Form({ route, method }) {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
-    const title = method === "login" ? "Login" : "Register";
+    const title = method === "login" ? "Login" : "Register"
+    const isRegister = useLocation().pathname === "/register/"
 
     const handleSubmit = async (e) => {
         setLoading(true);
@@ -58,6 +59,11 @@ function Form({ route, method }) {
                     {loading ? "Loading..." : title}
                 </button>
             </div>
+            <p className="mt-4">
+                {isRegister ?
+                    <Link to="/login/">Already Have an Account? <span className="text-blue-600">Login</span></Link> :
+                    <Link to="/register/"> Haven't Signed in Yet?<span className="text-blue-600"> Register</span></Link>}
+            </p>
         </form>
     );
 }

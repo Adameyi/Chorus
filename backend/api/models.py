@@ -2,6 +2,83 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 
+# Chat Functionality
+
+class Friends(models.Model):
+    user = models.ForeignKey(User, related_name='friendships', on_delete=models.CASCADE)
+    friend = models.ForeignKey(User, related_name='friend_of', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    # Unique constraint, No 2 Rows should have the same combination of user and friend
+    class Meta:
+        unique_together = ('user', 'friend')
+        
+    def __str__(self):
+        return f"{self.user.username} is friends with {self.friend.username}"
+
+class FriendRequest(models.Model):
+    sender = models.ForeignKey(User, related_name='sent_requests', on_delete=models.CASCADE)
+    receiver = models.ForeignKey(User, related_name='received_requests', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=10,
+    choices= [
+            ('pending', 'Pending'),  
+            ('accepted', 'Accepted'),
+            ('rejected', 'Rejected')
+        ],
+        default='pending'                     
+    )
+    
+class Blocked(models.Model):
+    blocker = models.ForeignKey(User, related_name='blocked_users', on_delete=models.CASCADE)
+    blocked = models.ForeignKey(User, related_name='blocked_by_user', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ("blocker", "blocked")
+
+class ChatRoom(models.Model):
+    name = models.CharField(max_length=100, blank=True)
+    participants = models.ManyToManyField(User, related_name='chat_rooms')
+    is_group_chat = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        if self.is_group_chat:
+            return self.name
+        else:
+            participants = list(self.participants.all())
+            if len(participants) == 2:
+                return f"{participants[0].username}'s and {participants[1].username} Chat"
+            else:
+                return f"Chat ID: {self.id}"
+ 
+ 
+class Message(models.Model):
+    chat_room = models.ForeignKey(ChatRoom, related_name='messages', on_delete=models.CASCADE)
+    sender = models.ForeignKey(User, related_name='sent_messages', on_delete=models.CASCADE)
+    content = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    edited_timestamp = models.DateTimeField()
+    is_read = models.BooleanField(default=False)   
+      
+    class Meta:
+         ordering = ['timestamp']
+         
+    def __str__(self):
+        return f"Message from {self.sender.username} in {self.chat_room}"
+ 
+class Emotes(models.Model):
+    message = models.ForeignKey(Message, related_name='emotes', on_delete=models.CASCADE)
+    sender = models.ForeignKey(User, related_name='emotes', on_delete=models.CASCADE)
+    reaction = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['message', 'sender', 'reaction']
+    
+# Task Management Functionality
+
 class Column(models.Model):
     title = models.CharField(max_length=255)
     order = models.IntegerField(default=0)
@@ -13,7 +90,7 @@ class Column(models.Model):
         
 
     def __str__(self):
-        return self.name 
+        return self.title
 
 class Task(models.Model):
     COLUMN_CHOICES = [
@@ -66,3 +143,4 @@ class TaskAttachment(models.Model):
     
     def __str__(self):
         return self.filename
+    
