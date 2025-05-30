@@ -247,6 +247,31 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         emote.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
     
+    #Get all emotes for a specific message
+    @action(detail=True, methods=['get'], url_path='messages/(?P<message_id>[^./]+)/emotes')
+    def get_message_Emotes(self, request, pk=None, message_id=None):
+        # Get all emote reactions for a specific message
+        chat_room = self.get_object()
+        
+        # Ensure user is a participant of this chat room
+        if not chat_room.participants.filter(id=request.user.id).exists():
+            return Response(
+                {
+                    "detail" : "You are not a participant in this chat room"
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        try:
+            message = Message.objects.get(id=message_id, chat_room=chat_room)
+        except Message.DoesNotExist:
+            return Response(
+                {
+                    "detail" : "Message Not Found"
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
     # Create DM with friend 
     @action(detail=False, methods=['post'])
     def direct(self, request):
