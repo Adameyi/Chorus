@@ -40,7 +40,7 @@ class FriendRequestSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = FriendRequest
-        fields = ['id','sender', 'receiever','status', 'created_at']
+        fields = ['id','sender', 'receiver','status', 'created_at']
         read_only_fields = ['sender', 'status','created_at']
     
     def create(self, validated_data):
@@ -57,15 +57,15 @@ class FriendRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Friend request has already been sent")
             
         # Check if they are friends with each other.
-        if Friends.objects.filter(user=sender, friend=receiver):
+        if Friends.objects.filter(blocker=sender, blocked=receiver):
             raise serializers.ValidationError("Both users are already added as friend")
        
         # Check if sender has blocked user.
-        if Blocked.objects.filter(user=sender, blocked=receiver):
-            raise serializers.ValidationError("Blocked by user, Cannot send friend request")
+        if Blocked.objects.filter(blocker=receiver, blocked=sender).exists():
+            raise serializers.ValidationError("This user has blocked you and cannot receive your friend request")
 
-        # Check if receiver has blocked user.
-        if Blocked.objects.filter(blocked=sender, blocked=receiver).exists():
+        #   Check if the receiver has blocked the sender
+        if Blocked.objects.filter(blocker=sender, blocked=receiver).exists():
             raise serializers.ValidationError("Blocked by user, Cannot send friend request")
         
         return FriendRequest.objects.create(sender=sender, receiver=receiver, **validated_data)

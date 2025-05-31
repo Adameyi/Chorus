@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
+from django.utils.timezone import now
 
 # Chat Functionality
 
@@ -11,7 +12,10 @@ class Friends(models.Model):
 
     # Unique constraint, No 2 Rows should have the same combination of user and friend
     class Meta:
-        unique_together = ('user', 'friend')
+        # unique_together = ('user', 'friend') - Depreciated
+        constraints = [
+            models.UniqueConstraint(fields=['user','friend'], name='unique_friendship')
+        ]
         
     def __str__(self):
         return f"{self.user.username} is friends with {self.friend.username}"
@@ -35,7 +39,10 @@ class Blocked(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        unique_together = ("blocker", "blocked")
+        # unique_together = ("blocker", "blocked") - Depreciated
+        constraints = [
+            models.UniqueConstraint(fields=['blocker','blocked'], name='unique_blocked_user')
+        ]
 
 class ChatRoom(models.Model):
     name = models.CharField(max_length=100, blank=True)
@@ -59,7 +66,7 @@ class Message(models.Model):
     sender = models.ForeignKey(User, related_name='sent_messages', on_delete=models.CASCADE)
     content = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
-    edited_timestamp = models.DateTimeField()
+    edited_timestamp = models.DateTimeField(default=now)
     is_read = models.BooleanField(default=False)   
       
     class Meta:
@@ -75,7 +82,10 @@ class Emotes(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        unique_together = ['message', 'sender', 'reaction']
+        # unique_together = ['message', 'sender', 'reaction'] - Depreciated
+        constraints = [
+            models.UniqueConstraint(fields=['message','sender','reaction'], name='unqiue_emote_per_user')
+        ]
     
 # Task Management Functionality
 

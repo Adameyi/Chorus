@@ -156,7 +156,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
      
     # Add/Annotate Emote to a message
-    @action(detail=True, methods=['post'], url_path='messages/(?p<message_id>[^/.]+)/emotes') 
+    @action(detail=True, methods=['post'], url_path='messages/(?P<message_id>[^/.]+)/emotes') 
     def add_emote(self, request, pk=None, message_id=None):
         
         chat_room = self.get_object()
@@ -215,7 +215,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     # Remove Emote from a message
-    @action(detail=True, methods=['post'], url_path='messages/(?p<message_id>[^/.]+)/emotes/(?P<emote_id>[^/.]+)') 
+    @action(detail=True, methods=['post'], url_path='messages/(?P<message_id>[^/.]+)/emotes/(?P<emote_id>[^/.]+)') 
     def delete_emote(self, request, pk=None, message_id=None, emote_id=None):
         # Delete emote reaction from a specific message.
         chat_room = self.get_object()
