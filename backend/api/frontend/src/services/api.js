@@ -51,65 +51,65 @@ export const taskAPI = {
 export const userAPI = {
 
     // Query Search Users
-    searchUsers: (query) => api.get(`/api/user/search/?q=%{}`),
+    searchUsers: (query) => api.get(`/user/search/?q=%{}`),
 
     // GET currnet user profile (Endpoint req)
-    getProfile: () => api.get(`/api/user/profile/`)
+    getProfile: () => api.get(`/user/profile/`)
 }
 
 // Friend Request API func
 export const friendRequestAPI = {
 
     // GET friend requests (sent & received)
-    getFriendRequest: () => api.get(`/api/friend-requests/`),
+    getFriendRequest: () => api.get(`/friend-requests/`),
 
     // POST friend request
-    sendFriendRequest: (receiverId) => api.post(`/api/friend-requests/`, { receiver_id: receiverId }),
+    sendFriendRequest: (receiverId) => api.post(`/friend-requests/`, { receiver_id: receiverId }),
 
     // UPDATE friend request (accept/reject)
-    respondToFriendRequest: (requestId, action) => api.post(`/api/friend-requests/${requestId}/respond/`, { action }),
+    respondToFriendRequest: (requestId, action) => api.post(`/friend-requests/${requestId}/respond/`, { action }),
 
     // GET friends list
-    getFriends: () => api.get(`/api/friends/`),
+    getFriends: () => api.get(`/friends/`),
 }
 
 //Chat Room API functions
 export const chatAPI = {
 
     //GET all chat rooms
-    getChatRooms: () => api.get(`/api/chat-room/`),
+    getChatRooms: () => api.get(`/chat-room/`),
 
     // POST new group chat
     createGroupChat: (name, participantIds) =>
-        api.post('/api/chat-room/', {
+        api.post('/chat-room/', {
             name,
             participant_ids: participantIds,
             is_group_chat: true
         }),
 
     // POST new DM chat
-    createDirectMessage: (friendId) => api.post(`/api/chat-room/direct/`, { friend_id: friendId }),
+    createDirectMessage: (friendId) => api.post(`/chat-room/direct/`, { friend_id: friendId }),
 
 
     // GET messages from chat room
-    getMessages: (chatRoomId) => api.get(`/api/chat-room/${chatRoomId}/get_messages/`),
+    getMessages: (chatRoomId) => api.get(`/chat-room/${chatRoomId}/get_messages/`),
 
     // POST messages to chat room
-    sendMessage: (chatRoomId, content) => api.post(`/api/chat-room/${chatRoomId}/send_message/`, { content }),
+    sendMessage: (chatRoomId, content) => api.post(`/chat-room/${chatRoomId}/send_message/`, { content }),
 
     // PUT messages to edit
-    editMessage: (chatRoomId, messageId, content) => api.put(`/api/chat-room/${chatRoomId}/messages/${messageId}`, { content }),
+    editMessage: (chatRoomId, messageId, content) => api.put(`/chat-room/${chatRoomId}/messages/${messageId}`, { content }),
 
     // DELETE messages from chat room
-    removeMessage: (chatRoomId, messageId) => api.delete(`/api/chat-room/${chatRoomId}/messages/${messageId}`),
+    removeMessage: (chatRoomId, messageId) => api.delete(`chat-room/${chatRoomId}/messages/${messageId}`),
 
 
     // POST emote to message
-    addEmote: (chatRoomId, messageId, reaction) => api.post(`/api/chat-room/${chatRoomId}/messages/${messageId}/emotes/`, { reaction }),
+    addEmote: (chatRoomId, messageId, reaction) => api.post(`/chat-room/${chatRoomId}/messages/${messageId}/emotes/`, { reaction }),
 
     // DELETE emote from message
-    removeEmote: (chatRoomId, messageId, emoteId) => api.post(`/api/chat-room/${chatRoomId}/messages/${messageId}/emotes/${emoteId}`),
+    removeEmote: (chatRoomId, messageId, emoteId) => api.post(`/chat-room/${chatRoomId}/messages/${messageId}/emotes/${emoteId}`),
 
     // GET emotes for specified message
-    getMessageEmotes: (chatRoomId, messageId) => api.get(`/api/chat-room/${chatRoomId}/messages/${messageId}/emotes/`),
+    getMessageEmotes: (chatRoomId, messageId) => api.get(`/chat-room/${chatRoomId}/messages/${messageId}/emotes/`),
 }
