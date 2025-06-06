@@ -1,6 +1,6 @@
 from django.urls import path, include
 from . import views
-from .views import TaskListCreateView, TaskDetailView, ChatRoomViewSet, FriendRequestViewSet
+from .views import TaskListCreateView, TaskDetailView, ChatRoomViewSet, FriendRequestViewSet, send_bot_message
 from rest_framework.routers import DefaultRouter
 
 # Router setup for ViewSets
@@ -19,6 +19,9 @@ urlpatterns = [
     #User Friends + Search
     path('user/search/', views.UserSearchView.as_view()),
     # path('friends/', views.FriendRequestViewSet.as_view(), name='friend-list'),
+
+    #Bot Messaging (Admin)
+    path('bot/send-message/', views.send_bot_message, name='bot-send-message'),
 
     #Include Router URLS
     path('', include(router.urls))

@@ -1,17 +1,39 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Task, Column, FriendRequest, Friends, Blocked, ChatRoom, Message, Emotes
+from .models import UserProfile, Task, Column, FriendRequest, Friends, Blocked, ChatRoom, Message, Emotes
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "password"]
+        fields = ["id", "username", "password", "display_name"]
         # Accept password when creating a user, but do not return it when giving info about user.
         extra_kwargs = {"password": {"write_only": True}}
     
     def create(self, validated_data):
+        # Retrieve profile data and remove it from validated_data dictionary (If none, default to empty dict)
+        profile_data = validated_data.pop('profile', {})
+        
+        # Create instance of User (Username & Password).
         user = User.objects.create_user(**validated_data)
+        
+        # Create instance of UserProfile using 'profile_data'.
+        UserProfile.objects.create(user=user, **profile_data)
         return user
+    
+    def update(self, instance, validated_data):
+        # Retrieve profile data and remove it from validated_data dictionary (If none, default to empty dict)
+        profile_data = validated_data.pop('profile', {})
+        
+        #Update the 'User' instance.
+        instance = super().update(instance, validated_data)
+        
+        # Access related UserProfile.
+        profile = instance.profile
+        
+        #Update display_name field in UserProfile to new display_name.
+        profile.display_name = profile_data.get('display_name', profile.display_name)
+        profile.save()
+        return instance
 
 class UserBasicSerializer(serializers.ModelSerializer):
     # Simplified user serializer for embedding in other responses

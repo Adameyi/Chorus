@@ -1,4 +1,5 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
+import { Search, MessageCircle, Users, User, Clock } from 'lucide-react'
 
 // Mock Messages for debugging
 const mockChatRoom = [
@@ -116,9 +117,28 @@ const mockMessages = {
 }
 
 const mockFriends = [
-  { id: 2, username: "jane_smith", displayName: "Jane Smith", status: "online" },
-  { id: 3, username: "mike_wilson", displayName: "Mike Wilson", status: "away" },
-  { id: 4, username: "sarah_jones", displayName: "Sarah Jones", status: "online" }
+  {
+    id: 2, username: "jane_smith", displayName: "Jane Smith", status: "online", last_message: {
+      content: "Campaign looks great!",
+      sender: "alex_brown",
+      timestamp: "2024-05-28T09:30:00Z",
+    }
+  },
+
+  {
+    id: 3, username: "mike_wilson", displayName: "Mike Wilson", status: "away", last_message: {
+      content: "Campaign looks great!",
+      sender: "alex_brown",
+      timestamp: "2024-05-28T09:30:00Z",
+    }
+  },
+  {
+    id: 4, username: "sarah_jones", displayName: "Sarah Jones", status: "online", last_message: {
+      content: "Campaign looks great!",
+      sender: "alex_brown",
+      timestamp: "2024-05-28T09:30:00Z",
+    }
+  }
 ];
 
 const mockAllUsers = [
@@ -133,68 +153,80 @@ const mockAllUsers = [
 const getStatusColor = (status) => {
   switch (status) {
     case 'online': return 'bg-green-500'
-    case 'online': return 'bg-yellow-500'
+    case 'away': return 'bg-yellow-500'
     case 'offline': return 'bg-gray-400'
     default: return 'bg-gray-400'
   }
 }
 
 function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
+  const [searchQuery, setSearchquery] = useState('')
   const [groupName, setGroupName] = useState('')
   const [participantInput, setParticipantInput] = useState('')
   const [participants, setParticipants] = useState([])
   const [description, setDescription] = useState('')
 
-//Filter functions
-const filteredChatRooms = useMemo(() => {
-  if (!searchQuery) return mockChatRoom
+  //Filter functions
+  const filteredChatRooms = useMemo(() => {
+    if (!searchQuery) return mockChatRoom
 
-  //Filter for Group Chat vs DMs
-  return mockChatRoom.filter(conv => {
-    if (conv.is_group_chat && conv.name) {
-      return conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+    //Filter for Group Chat vs DMs
+    return mockChatRoom.filter(conv => {
+      if (conv.is_group_chat && conv.name) {
+        return conv.name.toLowerCase().includes(searchQuery.toLowerCase())
+      } else {
+        //For non-group chats, search through the participant names. Make sure it does not include logged in user's (self) name
+        const otherParticipants = conv.participants.filter(p => p.username !== "john_doe")
+
+        return otherParticipants.some(p => p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.username.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      }
+    })
+  }, [searchQuery])
+
+  const filteredFriends = useMemo(() => {
+    if (!searchQuery) return mockFriends
+
+    return mockFriends.filter(friend =>
+      friend.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      friend.username.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [searchQuery])
+
+  const filterAllUsers = useMemo(() => {
+    if (!searchQuery) return mockAllUsers
+
+    return mockAllUsers.filter(user =>
+      user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) || user.username.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [searchQuery])
+
+  const getConversationDisplayName = (conversation) => {
+    if (conversation.is_group_chat && conversation.name) {
+      return conversation.name
     } else {
-      //For non-group chats, search through the participant names. Make sure it does not include logged in user's (self) name
-      const otherParticipants = conv.participants.filter(p => p.username !== "john_doe")
-
-      return otherParticipants.some(p => p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.username.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      //For DM chats only, find the other participant
+      const otherParticipant = conversation.participants.find(p => p.username !== "john_doe")
+      return otherParticipant ? otherParticipant.displayName : "Unknown"
     }
-  })
-}, [searchQuery])
-
-const filteredFriends = useMemo(() => {
-  if (!searchQuery) return mockFriends
-
-  return mockFriends.filter(friend => {
-    friend.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    friend.username.toLowerCase().includes(searchQuery.toLowerCase())
-  })
-}, [searchQuery])
-
-const filterAllUsers = useMemo(() => {
-  if (!searchQuery) return mockFriends
-
-  return mockAllUsers.filter(user => {
-    user.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    user.username.toLowerCase().includes(searchQuery.toLowerCase())
-  })
-}, [searchQuery])
-
-const getConversationDisplayName = (conversation) => {
-  if (conversation.is_group_chat && conversation.name) {
-    return conversation.name
-  } else {
-    //For DM chats only, find the other participant
-    const otherParticipant = conversation.participants.find(p => p.username !== "john_doe")
-    return otherParticipant ? otherParticipant.displayName : "Unknown"
   }
-}
+
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp)
+    const now = new Date()
+    const hourDiff = (now - date) / (1000 * 60 * 60)
+
+    if (hourDiff < 24) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
+    }
+  }
 
   const addFriend = (friend) => {
-    if (!participants.includes(friend.name)) {
-      setParticipants([...participants, friend.name])
+    if (!participants.includes(friend.displayName)) {
+      setParticipants([...participants, friend.displayName])
     }
   }
 
@@ -230,22 +262,115 @@ const getConversationDisplayName = (conversation) => {
   return (
     <>
       {modalOpen &&
-        <div className='flex justify-center items-center fixed inset-0 bg-gray-600/50 z-20'>
+        <div
+          onClick={closeModal}
+          className='flex justify-center items-center fixed inset-0 bg-gray-600/50 z-20'>
           {/*Search Conversations, Users, Friends Modal */}
           {fullSearch &&
-            <div className='bg-white w-1/3 flex flex-col space-y-5 p-6'>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className='bg-white w-full lg:w-1/3 flex flex-col space-y-5 p-6'>
+              <Search className='absolute mt-7 w-7 h-7 ml-2 text-gray-400' />
               <input
                 type="text"
-                placeholder='Where would you like to go?' />
+                placeholder='Where would you like to go?'
+                value={searchQuery}
+                onChange={(e) => setSearchquery(e.target.value)}
+                className='pl-10 p-2 border rounded-2xl text-xl' />
+              {/* Search Result */}
+              <div className='flex flex-col gap-2 overflow-y-auto'>
+                <div className='flex flex-row items-center gap-2'>
+                  <Clock className='h-4 w-4' />
+                  <h1>RECENT CONVERSATIONS</h1>
+                </div>
+                {/* Recent Conversation */}
+                {filteredChatRooms.length > 0 && (
+                  <>
+                    {filteredChatRooms.map((chat) =>
+                      <div key={chat.id} className='flex flex-row w-full'>
+                        <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
+                          {chat.is_group_chat ? (
+                            <Users className='w-6 h-6 text-gray-600' />
+                          ) : (
+                            <User className='w-6 h-6 text-gray-600' />
+                          )}
+                        </div>
+                        <div className={`w-3 h-3 ml-[-0.5rem] mt-9 rounded-full ${getStatusColor(chat.status)} `} />
+                        <div className='w-full ml-2'>
+                          {chat.is_group_chat ? (
+                            <div className='flex justify-between w-full'>
+                              <h1>{chat.name}'s Team</h1>
+                              <small>{formatTimestamp(chat.last_message.timestamp)}</small>
+                            </div>
+                          ) : (
+                            <div className='flex justify-between'>
+                              <h1>{getConversationDisplayName(chat)}</h1>
+                              <small>{formatTimestamp(chat.last_message.timestamp)}</small>
+                            </div>
+                          )}
+                          <small>{chat.last_message.content}</small>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className='flex flex-row items-center gap-2'>
+                  <User className='h-4 w-4' />
+                  <h1>FRIENDS</h1>
+                </div>
+                {/* Friends */}
+                {filteredFriends.length > 0 && (
+                  <>
+                    {filteredFriends.map((friend) =>
+                      <div key={friend.id} className='flex flex-row gap-2 w-full'>
+                        <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
+                          <User className='w-6 h-6 text-gray-600' />
+                        </div>
+                        <div className={`w-3 h-3 ml-[-1rem] mt-9 rounded-full ${getStatusColor(friend.status)} `} />
+                        <div className='w-full'>
+                          <div className='flex justify-between'>
+                            <h1>{friend.displayName}</h1>
+                            <small>{formatTimestamp(friend.last_message.timestamp)}</small>
+                          </div>
+                          <small>{friend.last_message.content}</small>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                <div className='flex flex-row items-center gap-2'>
+                  <Users className='h-4 w-4' />
+                  <h1>ALL USERS</h1>
+                </div>
+                {/* All Users */}
+                {filterAllUsers.length > 0 && (
+                  <>
+                    {filterAllUsers.map((user) =>
+                      <div key={user.id} className='flex flex-row gap-2 w-full'>
+                        <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
+                          <User className='w-6 h-6 text-gray-600' />
+                        </div>
+                        <div className={`w-3 h-3 ml-[-1rem] mt-9 rounded-full ${getStatusColor(user.status)} `} />
+                        <div className='w-full'>
+                          <div className='flex justify-between'>
+                            <h1>{user.displayName}</h1>
 
-              <h1>Recent Conversations</h1>
-              <h1>Friends</h1>
-              <h1>All Users</h1>
+                          </div>
+                          <small className='text-gray-500'>{user.status}</small>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
             </div>
           }
           {/* Create Chat Modal */}
           {!fullSearch &&
-            <div className='bg-white w-1/3 flex flex-col space-y-5 p-6'>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className='bg-white w-1/3 flex flex-col space-y-5 p-6'>
               <div className='flex justify-between m-2'>
                 <h1 className='text-bold text-2xl z-10'>Create Group Chat or Direct Message</h1>
                 <button onClick={closeModal}>
@@ -277,7 +402,13 @@ const getConversationDisplayName = (conversation) => {
                       placeholder='Enter Name or Email'
                       value={participantInput}
                       onChange={(e) => setParticipantInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault().addParticipant())}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addParticipant();
+                        }
+                      }
+                      }
                     />
                     <button
                       type='button'
@@ -310,13 +441,13 @@ const getConversationDisplayName = (conversation) => {
                 <div>
                   <p>Quick Add Participants:</p>
                   <div className='flex flex-col gap-2 max-h-48 overflow-y-auto'>
-                    {mockFriends.map(friend => (
+                    {mockAllUsers.map(p => (
                       <button
-                        key={friend.id}
-                        onClick={() => addFriend(friend)}
+                        key={p.id}
+                        onClick={() => addFriend(p)}
                         type='button'
-                        className={`${participants.includes(friend.name) ? "bg-teal-100 cursor-not-allowed" : "bg-gray-200 hover:bg-gray-100"} flex flex-row justify-between bg-gray-200 p-2 rounded-lg`}>
-                        <p>{friend.name}</p>
+                        className={`${participants.includes(p.displayName) ? "bg-teal-100 cursor-not-allowed" : "bg-gray-200 hover:bg-gray-100"} flex flex-row justify-between bg-gray-200 p-2 rounded-lg`}>
+                        <p>{p.displayName}</p>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
@@ -331,7 +462,7 @@ const getConversationDisplayName = (conversation) => {
                     id="groupDescription"
                     className='border p-2 rounded-lg'
                     type="text"
-                    placeholder='Description of Group Chat..'
+                    placeholder='Description of Chat..'
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                   />

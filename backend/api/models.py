@@ -2,8 +2,15 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 from django.utils.timezone import now
+from PIL import Image as PILImage
 
 # Chat Functionality
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    display_name = models.CharField(max_length=255, blank=True, null=True) # Display Name should be optional
+
+    def __str__(self):
+        return self.display_name or self.user.username
 
 class Friends(models.Model):
     user = models.ForeignKey(User, related_name='friendships', on_delete=models.CASCADE)
@@ -74,6 +81,26 @@ class Message(models.Model):
          
     def __str__(self):
         return f"Message from {self.sender.username} in {self.chat_room}"
+ 
+class MessageImage(models.Model):
+    # Handler for image attachments for messages
+    message = models.ForeignKey(Message, related_name='images', on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='chat_images/%Y/%m/%d/')
+    caption = models.CharField(max_length=255, blank=True, null=True) 
+    file_size = models.PositiveIntegerField(editable=False) 
+    img_width = models.PositiveIntegerField(null = True, blank=True, editable=False)
+    img_height = models.PositiveIntegerField(null = True, blank=True, editable=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['uploaded_at']
+    
+    def save(self, *args, **kwargs):
+        if self.image:
+            self.file_size = self.image.size
+            # Fetch dimensions from uploaded image
+            img = PILImage.open(self.image)
+    
  
 class Emotes(models.Model):
     message = models.ForeignKey(Message, related_name='emotes', on_delete=models.CASCADE)

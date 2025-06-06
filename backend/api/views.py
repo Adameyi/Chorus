@@ -3,10 +3,11 @@ from django.contrib.auth.models import User
 from django.db.models import Q
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.response import Response
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from .serializers import UserSerializer, TaskSerializer, UserBasicSerializer, MessageSerializer, ChatRoomSerializer, EmoteSerializer, FriendRequestSerializer, FriendSerializer
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from .models import Task, Column, FriendRequest, Friends, Blocked, ChatRoom, Message, Emotes
+from .utils.bot_utils import GuchiBot
 
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all() #List all users to ensure duplicates do not exist.
@@ -320,3 +321,46 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(chat_room)
         return Response(serializer.data)
+    
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def send_bot_message(request):
+    #An admin endpoint to send messages as Guchi Bot
+    user_id = request.data.get('user_id')
+    message_content = request.data.get('message')
+    
+    if not user_id or not message_content:
+        return Response(
+            {
+                "error" : "A user_id and message content are required!"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    try:
+        user = User.objects.get(id=user_id)
+        bot = GuchiBot()
+        message = bot.send_custom_message(user, message_content)
+        
+        if message:
+            return Response(
+                {
+                    "success" : True,
+                    "message" : "Bot message sent successfully"
+                }
+            )
+        else:
+            return Response(
+            {
+                "error" : "Failed to send message"
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR 
+            )
+            
+    except User.DoesNotExist:
+        return Response (
+            {
+                "error" : "User not found"
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
