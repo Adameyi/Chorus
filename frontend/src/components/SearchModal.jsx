@@ -1,154 +1,6 @@
 import React, { useState, useMemo } from 'react'
 import { Search, MessageCircle, Users, User, Clock } from 'lucide-react'
-
-// Mock Messages for debugging
-const mockChatRoom = [
-  {
-    id: 1,
-    name: "Test Project",
-    participants: [
-      { id: 1, username: "john_doe" },
-      { id: 2, username: "jane_smith" },
-      { id: 3, username: "mike_wilson" },
-      { id: 4, username: "sarah_jones" },
-    ],
-    is_group_chat: true,
-    created_at: "2024-05-28T10:00:00Z",
-    last_message: {
-      content: "Project Deadline has been moved to next Friday",
-      sender: "sarah_jones",
-      timestamp: "2024-05-29T14:00:00Z",
-    }
-  },
-  {
-    id: 2,
-    name: null,
-    participants: [
-      { id: 1, username: "john_doe", displayName: "John Doe" },
-      { id: 2, username: "jane_smith", displayName: "Jane Smith" },
-    ],
-    is_group_chat: false,
-    last_message: {
-      content: "Can you review the doc I sent?",
-      sender: "jane_smith",
-      timestamp: "2024-05-19T12:20:00Z",
-    }
-  },
-  {
-    id: 3,
-    name: "Marketing Team",
-    participants: [
-      { id: 1, username: "john_doe", displayName: "John Doe" },
-      { id: 5, username: "alex_brown", displayName: "Alex Brown" },
-      { id: 6, username: "lisa_white", displayName: "Lisa White" },
-    ],
-    is_group_chat: true,
-    last_message: {
-      content: "Campaign looks great!",
-      sender: "alex_brown",
-      timestamp: "2024-05-28T09:30:00Z",
-    }
-  }
-];
-
-
-
-const mockMessages = {
-  1: [
-    {
-      id: 1,
-      sender: { id: 1, username: "john_doe" },
-      content: "Good morning everyone! Let's discuss today's priorities.",
-      timestamp: "2024-06-01T09:00:00Z",
-      is_read: true
-    },
-    {
-      id: 2,
-      sender: { id: 2, username: "jane_smith" },
-      content: "I've finished the UI mockups. They're ready for review.",
-      timestamp: "2024-06-01T09:15:00Z",
-      is_read: true
-    },
-    {
-      id: 3,
-      sender: { id: 4, username: "sarah_jones" },
-      content: "Great work Jane! I'll review them this afternoon.",
-      timestamp: "2024-06-01T09:18:00Z",
-      is_read: true
-    },
-    {
-      id: 4,
-      sender: { id: 3, username: "mike_wilson" },
-      content: "The backend API is almost complete. Should be ready by tomorrow.",
-      timestamp: "2024-06-01T10:30:00Z",
-      is_read: true
-    },
-    {
-      id: 5,
-      sender: { id: 4, username: "sarah_jones" },
-      content: "The project deadline has been moved to next Friday",
-      timestamp: "2024-06-01T14:30:00Z",
-      is_read: false
-    }
-  ],
-  2: [
-    {
-      id: 6,
-      sender: { id: 2, username: "jane_smith" },
-      content: "Hi Sarah, I've sent you the design document for review.",
-      timestamp: "2024-06-01T13:30:00Z",
-      is_read: true
-    },
-    {
-      id: 7,
-      sender: { id: 1, username: "john_doe" },
-      content: "Thanks! I'll take a look at it shortly.",
-      timestamp: "2024-06-01T13:32:00Z",
-      is_read: true
-    },
-    {
-      id: 8,
-      sender: { id: 2, username: "jane_smith" },
-      content: "Can you review the document I sent?",
-      timestamp: "2024-06-01T13:45:00Z",
-      is_read: false
-    }
-  ],
-}
-
-const mockFriends = [
-  {
-    id: 2, username: "jane_smith", displayName: "Jane Smith", status: "online", last_message: {
-      content: "Campaign looks great!",
-      sender: "alex_brown",
-      timestamp: "2024-05-28T09:30:00Z",
-    }
-  },
-
-  {
-    id: 3, username: "mike_wilson", displayName: "Mike Wilson", status: "away", last_message: {
-      content: "Campaign looks great!",
-      sender: "alex_brown",
-      timestamp: "2024-05-28T09:30:00Z",
-    }
-  },
-  {
-    id: 4, username: "sarah_jones", displayName: "Sarah Jones", status: "online", last_message: {
-      content: "Campaign looks great!",
-      sender: "alex_brown",
-      timestamp: "2024-05-28T09:30:00Z",
-    }
-  }
-];
-
-const mockAllUsers = [
-  { id: 5, username: "alex_brown", displayName: "Alex Brown", status: "offline" },
-  { id: 6, username: "lisa_white", displayName: "Lisa White", status: "online" },
-  { id: 7, username: "david_clark", displayName: "David Clark", status: "away" },
-  { id: 8, username: "emma_davis", displayName: "Emma Davis", status: "online" },
-  { id: 9, username: "ryan_taylor", displayName: "Ryan Taylor", status: "offline" },
-  { id: 10, username: "sophia_wilson", displayName: "Sophia Wilson", status: "online" }
-];
+import { userAPI, friendRequestAPI, chatAPI } from '../services/api'
 
 const getStatusColor = (status) => {
   switch (status) {
@@ -166,9 +18,100 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
   const [participants, setParticipants] = useState([])
   const [description, setDescription] = useState('')
 
+  // API Data States
+  const [chatRooms, setChatRooms] = useState([])
+  const [friends, setFriends] = useState([])
+  const [allUsers, setAllUsers] = useState([])
+  const [currentUser, setCurrentUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  //Fetch Data on component mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        setError(null) //Reset the error state.
+
+        console.log('Fetching Data...')
+
+        //Mock current userprofile
+        const mockUser = {
+          id: 1,
+          username: 'current_user',
+          display_name: 'Current User',
+          email: 'user@example.com',
+        }
+        setCurrentuser(mockUser)
+
+        //Fetch Chat Rooms
+        console.log('Fetching Chat rooms...')
+        try {
+          const chatRoomsResponse = await chatAPI.getChatRooms()
+          console.log('Chat Rooms Response:', chatRoomsResponse)
+          setChatRooms(chatRoomsResponse.Response.data || [])
+        } catch (chatRoomError) {
+          console.error('Error fetching chat rooms:', chatRoomError)
+          setChatRooms([]) //Set Chat Rooms as empty array when faile
+        }
+        //Mock FriendsList
+
+        //Fetch all users using search
+        console.log('Fetching all users...')
+        try {
+          const usersResponse = await userAPI.searchUsers()
+          console.log('Search Response:', chatRoomsResponse)
+          setAllUsers(chatRoomsResponse.Response.data || [])
+        } catch (searcError) {
+          console.error('Error fetching users:', searcError)
+          setAllUsers([]) //Set Chat Rooms as empty array when faile
+        }
+        console.log('Data fetch complete.')
+      } catch (error) {
+        console.error('Error in fetchData:', error)
+        console.error('Error: details:', {
+          message: error.message,
+          response: error.reesponse?.data,
+          status: error.response?.status
+        })
+        setError(`Failed to load data: ${error.response?.data?.message || error.message}`)
+      } finally {
+        console.log('Setting loading to false')
+        setLoading(false)
+      }
+  }
+
+  if (modalOpen) {
+    console.log('Modal opened, fetching data...')
+    fetchData()
+  } else {
+    console.log('Modal closed, resetting the loading state')
+    setLoading(false)
+  }
+  }, [modalOpen])
+
+  //Search users when search query event changes
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (searchQuery.trim()) {
+        try {
+          console.log('Search users with query:', searchQuery)
+          const response = await userAPI.searchUsers(searchQuery)
+          console.log('Search users response:', response)
+          setAllUsers(response.data || [])
+        } catch (error) {
+          console.log('Error searching users:', error)
+        }
+      }
+    } 
+
+    const debounceTimer = setTimeout(searchUsers, 300)
+    return () => clearTimeout(debounceTimer)
+  }, [searchQuery])
+
   //Filter functions
   const filteredChatRooms = useMemo(() => {
-    if (!searchQuery) return mockChatRoom
+    if (!searchQuery) return chatRooms
 
     //Filter for Group Chat vs DMs
     return mockChatRoom.filter(conv => {
