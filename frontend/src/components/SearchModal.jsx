@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Search, MessageCircle, Users, User, Clock } from 'lucide-react'
 import { userAPI, friendRequestAPI, chatAPI } from '../services/api'
 
@@ -12,7 +12,7 @@ const getStatusColor = (status) => {
 }
 
 function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
-  const [searchQuery, setSearchquery] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
   const [groupName, setGroupName] = useState('')
   const [participantInput, setParticipantInput] = useState('')
   const [participants, setParticipants] = useState([])
@@ -42,29 +42,40 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
           display_name: 'Current User',
           email: 'user@example.com',
         }
-        setCurrentuser(mockUser)
+        setCurrentUser(mockUser)
 
         //Fetch Chat Rooms
         console.log('Fetching Chat rooms...')
         try {
           const chatRoomsResponse = await chatAPI.getChatRooms()
           console.log('Chat Rooms Response:', chatRoomsResponse)
-          setChatRooms(chatRoomsResponse.Response.data || [])
+          setChatRooms(chatRoomsResponse.Response?.data || chatRoomsResponse.data || [])
         } catch (chatRoomError) {
           console.error('Error fetching chat rooms:', chatRoomError)
-          setChatRooms([]) //Set Chat Rooms as empty array when faile
+          setChatRooms([]) //Set Chat Rooms as empty array when failed
         }
-        //Mock FriendsList
+
+        // Fetch Friends List
+        console.log('Fetching Friends...')
+        try {
+          const friendsResponse = await friendRequestAPI.getFriends()
+          console.log('Friends Response:', friendsResponse)
+          setChatRooms(friendsResponse.Response?.data || friendsResponse.data || [])
+        } catch (friendsError) {
+          console.error('Error fetching friends:', friendsError)
+          setFriends([]) //Set Chat Rooms as empty array when failed
+        }
+
 
         //Fetch all users using search
         console.log('Fetching all users...')
         try {
-          const usersResponse = await userAPI.searchUsers()
-          console.log('Search Response:', chatRoomsResponse)
-          setAllUsers(chatRoomsResponse.Response.data || [])
+          const usersResponse = await userAPI.searchUsers('')
+          console.log('Search Response:', usersResponse)
+          setAllUsers(usersResponse.Response?.data || usersResponse.data || [])
         } catch (searcError) {
           console.error('Error fetching users:', searcError)
-          setAllUsers([]) //Set Chat Rooms as empty array when faile
+          setAllUsers([]) //Set Chat Rooms as empty array when failed
         }
         console.log('Data fetch complete.')
       } catch (error) {
@@ -79,18 +90,18 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
         console.log('Setting loading to false')
         setLoading(false)
       }
-  }
+    }
 
-  if (modalOpen) {
-    console.log('Modal opened, fetching data...')
-    fetchData()
-  } else {
-    console.log('Modal closed, resetting the loading state')
-    setLoading(false)
-  }
+    if (modalOpen) {
+      console.log('Modal opened, fetching data...')
+      fetchData()
+    } else {
+      console.log('Modal closed, resetting the loading state')
+      setLoading(false)
+    }
   }, [modalOpen])
 
-  //Search users when search query event changes
+  // Search users when search query event changes.
   useEffect(() => {
     const searchUsers = async () => {
       if (searchQuery.trim()) {
@@ -98,12 +109,20 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
           console.log('Search users with query:', searchQuery)
           const response = await userAPI.searchUsers(searchQuery)
           console.log('Search users response:', response)
-          setAllUsers(response.data || [])
+          setAllUsers(response.Response?.data || response.data || [])
+        } catch (error) {
+          console.log('Error searching users:', error)
+        }
+      } else {
+        // Reset to all users when search is emptied.
+        try {
+          const response = await userAPI.searchUsers('')
+          setAllUsers(response.Response?.data || response.data || [])
         } catch (error) {
           console.log('Error searching users:', error)
         }
       }
-    } 
+    }
 
     const debounceTimer = setTimeout(searchUsers, 300)
     return () => clearTimeout(debounceTimer)
@@ -114,48 +133,58 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
     if (!searchQuery) return chatRooms
 
     //Filter for Group Chat vs DMs
-    return mockChatRoom.filter(conv => {
+    return chatRooms.filter(conv => {
       if (conv.is_group_chat && conv.name) {
         return conv.name.toLowerCase().includes(searchQuery.toLowerCase())
       } else {
         //For non-group chats, search through the participant names. Make sure it does not include logged in user's (self) name
-        const otherParticipants = conv.participants.filter(p => p.username !== "john_doe")
+        const otherParticipants = conv.participants?.filter(p => p.username !== currentUser?.username)
 
-        return otherParticipants.some(p => p.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        return otherParticipants.some(p => (p.displayName || p.display_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
           p.username.toLowerCase().includes(searchQuery.toLowerCase())
         )
       }
     })
-  }, [searchQuery])
+  }, [searchQuery, chatRooms, currentUser])
 
   const filteredFriends = useMemo(() => {
-    if (!searchQuery) return mockFriends
+    if (!searchQuery) return friends
 
-    return mockFriends.filter(friend =>
-      friend.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      friend.username.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [searchQuery])
+    return friends.filter(friendObj => {
+      // friendObj.friend?.displayName && friendObj.friend.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      // friendObj.friend?.username?.toLowerCase().includes(searchQuery.toLowerCase())
+      const friend = friendObj.friend || friendObj
+      const displayName = friend.displayName || friend.display_name || ''
+      const username = friend.username || ''
+
+      return displayName.toLowerCase().includes(searchQuery.toLowerCase()) || username.toLowerCase().includes(searchQuery.toLowerCase())
+    })
+  }, [searchQuery, friends])
 
   const filterAllUsers = useMemo(() => {
-    if (!searchQuery) return mockAllUsers
+    if (!searchQuery) return allUsers
 
-    return mockAllUsers.filter(user =>
-      user.displayName.toLowerCase().includes(searchQuery.toLowerCase()) || user.username.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  }, [searchQuery])
+    return allUsers.filter(user => {
+      // (user.displayName && user.displayName.toLowerCase().includes(searchQuery.toLowerCase())) || user.username.toLowerCase().includes(searchQuery.toLowerCase())
+      const displayName = user.displayName || user.display_name || ''
+      const username = user.username || ''
+
+      return displayName.toLowerCase().includes(searchQuery.toLowerCase()) || username.toLowerCase().includes(searchQuery.toLowerCase())
+    })
+  }, [searchQuery, allUsers])
 
   const getConversationDisplayName = (conversation) => {
     if (conversation.is_group_chat && conversation.name) {
       return conversation.name
     } else {
       //For DM chats only, find the other participant
-      const otherParticipant = conversation.participants.find(p => p.username !== "john_doe")
-      return otherParticipant ? otherParticipant.displayName : "Unknown"
+      const otherParticipant = conversation.participants.find(p => p.username !== currentUser?.username)
+      return otherParticipant ? (otherParticipant.displayName || otherParticipant.display_name || otherParticipant.username) : "Unknown"
     }
   }
 
   const formatTimestamp = (timestamp) => {
+    if (!timestamp) return ''
     const date = new Date(timestamp)
     const now = new Date()
     const hourDiff = (now - date) / (1000 * 60 * 60)
@@ -173,9 +202,17 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
     }
   }
 
+  const addUserAsParticipant = (user) => {
+    const displayName = user.display_name || user.username
+    //Check if Any Paritcipants in the array have an id that matches current user.
+    if (!participants.some(p => p.id === user.id)) {
+      setParticipants([...participants, { id: user.id, name: displayName }])
+    }
+  }
+
   const addParticipant = () => {
-    if (participantInput.trim() && !participants.includes(participantInput.trim())) {
-      setParticipants([...participants, participantInput.trim()])
+    if (participantInput.trim() && !participants.includes(p => p.name === participantInput.trim())) {
+      setParticipants([...participants, { id: null, name: participantInput.trim() }])
       setParticipantInput('')
     }
   }
@@ -184,22 +221,145 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
     setParticipants(participants.filter(p => p !== name))
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log({
-      groupName,
-      participants,
-      description
-    })
-    //Reset form
-    setGroupName('');
-    setParticipants([])
-    setDescription('')
-    setModalOpen(false)
+
+    try {
+      // Extract participant IDS - Only for users we found through API.
+      const participantIds = participants.filter(p => p.id !== null).map(p => p.id)
+
+      // Ensure participant list isn't empty.
+      if (participantIds.length === 0) {
+        alert('Please add at least one participant from the user list')
+        return
+      }
+
+      let response
+      if (participantIds.length === 1 && !groupName) {
+        //Create DM Only.
+        response = await chatAPI.createDirectMessage(participantIds[0])
+      } else {
+        //Create group chat
+        response = await chatAPI.createGroupChat(groupName || 'New Group', participantIds)
+      }
+
+      console.log({
+        groupName,
+        participants,
+        description,
+      },
+        "Chat Created:",
+        response.data
+      )
+
+      //Reset form
+      setGroupName('');
+      setParticipants([])
+      setDescription('')
+      setModalOpen(false)
+
+      //Refresh chat rooms
+      const chatRoomsResponse = await chatAPI.getChatRooms()
+      setChatRooms(chatRoomsResponse.data || [])
+    } catch (error) {
+      console.error('Error creating chat:', error)
+      alert('Failed to create chat:' + (error.response?.data?.detail || error.message))
+    }
   }
 
   function closeModal() {
     setModalOpen(false)
+  }
+
+  // Display loading state
+  if (loading) {
+    return (
+      <div
+        onClick={closeModal}
+        className='flex justify-center items-center fixed inset-0 bg-gray-600/50 z-20'>
+        <div className='bg-white p-8 rounded-lg'>
+          <p>
+            Loading...
+          </p>
+          <button
+            onClick={closeModal}
+            className='mt-4 px-4 py-2 bg-gray-300 rounded hover:bg-gray-400'
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Display error state
+  if (error) {
+    return (
+      <div
+        onClick={closeModal}
+        className='flex justify-center items-center fixed inset-0 bg-gray-600/50 z-20'>
+        <div className='bg-white p-8 rounded-lg'>
+          <p className='text-red-500 mb-4'>{error}</p>
+          <button onClick={() => {
+            setError(null)
+            setLoading(true)
+
+            // Retry data fetch.
+            const fetchData = async () => {
+              try {
+                // Mock current user profile
+                const mockUser = {
+                  id: 1,
+                  username: 'placeholder_user',
+                  display_name: 'Placeholder 001',
+                  email: 'user@example.com'
+                }
+                setCurrentUser(mockUser)
+
+                // Retry chat room data fetch.
+                try {
+                  const chatRoomsResponse = await chatAPI.getChatRooms()
+                  setChatRooms(chatRoomsResponse.data || [])
+                } catch (chatError) {
+                  setChatRooms([])
+                }
+
+                // Retry friends fetch.
+                try {
+                  const friendsResponse = await friendRequestAPI.getFriends()
+                  setFriends(friendsResponse?.data || friendsResponse.data || [])
+                } catch (chatError) {
+                  setFriends([])
+                }
+
+                // Retry user fetch.
+                try {
+                  const searchResponse = await userAPI.searchUsers('')
+                  setAllUsers(searchResponse.data || [])
+                } catch (searchError) {
+                  setAllUsers([])
+                }
+              } catch (error) {
+                setError(`Failed to load data: ${error.response?.data?.message || error.message}`)
+              } finally {
+                setLoading(false)
+              }
+            }
+            fetchData()
+          }}
+            className='px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600'
+          >
+            Retry
+          </button>
+          <button
+            onClick={closeModal}
+            className='mt-4 px-4 py-2 bg-gray-300 roudned hover:bg-gray-400'
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -218,7 +378,7 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
                 type="text"
                 placeholder='Where would you like to go?'
                 value={searchQuery}
-                onChange={(e) => setSearchquery(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className='pl-10 p-2 border rounded-2xl text-xl' />
               {/* Search Result */}
               <div className='flex flex-col gap-2 overflow-y-auto'>
@@ -229,7 +389,7 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
                 {/* Recent Conversation */}
                 {filteredChatRooms.length > 0 && (
                   <>
-                    {filteredChatRooms.map((chat) =>
+                    {filteredChatRooms.slice(0, 5).map((chat) =>
                       <div key={chat.id} className='flex flex-row w-full'>
                         <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
                           {chat.is_group_chat ? (
@@ -264,21 +424,25 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
                 {/* Friends */}
                 {filteredFriends.length > 0 && (
                   <>
-                    {filteredFriends.map((friend) =>
-                      <div key={friend.id} className='flex flex-row gap-2 w-full'>
-                        <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
-                          <User className='w-6 h-6 text-gray-600' />
-                        </div>
-                        <div className={`w-3 h-3 ml-[-1rem] mt-9 rounded-full ${getStatusColor(friend.status)} `} />
-                        <div className='w-full'>
-                          <div className='flex justify-between'>
-                            <h1>{friend.displayName}</h1>
-                            <small>{formatTimestamp(friend.last_message.timestamp)}</small>
+                    {filteredFriends.slice(0, 5).map((friendObj, index) => {
+                      const friend = friendObj.friend || friendObj
+                      const displayName = friend.displayName || friend.display_name || friend.username
+                      return (
+                        <div key={friend.id || index} className='flex flex-row gap-2 w-full'>
+                          <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
+                            <User className='w-6 h-6 text-gray-600' />
                           </div>
-                          <small>{friend.last_message.content}</small>
+                          <div className={`w-3 h-3 ml-[-1rem] mt-9 rounded-full ${getStatusColor(friend.status)} `} />
+                          <div className='w-full'>
+                            <div className='flex justify-between'>
+                              <h1>{displayName}</h1>
+                              <small>{formatTimestamp(friendObj.last_message.timestamp)}</small>
+                            </div>
+                            <small>{friend.last_message.content}</small>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })}
                   </>
                 )}
                 <div className='flex flex-row items-center gap-2'>
@@ -288,21 +452,24 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
                 {/* All Users */}
                 {filterAllUsers.length > 0 && (
                   <>
-                    {filterAllUsers.map((user) =>
-                      <div key={user.id} className='flex flex-row gap-2 w-full'>
-                        <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
-                          <User className='w-6 h-6 text-gray-600' />
-                        </div>
-                        <div className={`w-3 h-3 ml-[-1rem] mt-9 rounded-full ${getStatusColor(user.status)} `} />
-                        <div className='w-full'>
-                          <div className='flex justify-between'>
-                            <h1>{user.displayName}</h1>
-
+                    {filterAllUsers.slice(0, 5).map((user) => {
+                      const displayName = user.displayName || user.display_name || user.username
+                      return (
+                        <div key={user.id} className='flex flex-row gap-2 w-full'>
+                          <div className='w-12 h-12 bg-purple-100 rounded-full flex justify-center items-center'>
+                            <User className='w-6 h-6 text-gray-600' />
                           </div>
-                          <small className='text-gray-500'>{user.status}</small>
+                          <div className={`w-3 h-3 ml-[-1rem] mt-9 rounded-full ${getStatusColor(user.status)} `} />
+                          <div className='w-full'>
+                            <div className='flex justify-between'>
+                              <h1>{displayName}</h1>
+
+                            </div>
+                            <small className='text-gray-500'>{user.status}</small>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )
+                    })}
                   </>
                 )}
               </div>
@@ -384,19 +551,25 @@ function SearchModal({ setModalOpen, modalOpen, fullSearch }) {
                 <div>
                   <p>Quick Add Participants:</p>
                   <div className='flex flex-col gap-2 max-h-48 overflow-y-auto'>
-                    {mockAllUsers.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => addFriend(p)}
-                        type='button'
-                        className={`${participants.includes(p.displayName) ? "bg-teal-100 cursor-not-allowed" : "bg-gray-200 hover:bg-gray-100"} flex flex-row justify-between bg-gray-200 p-2 rounded-lg`}>
-                        <p>{p.displayName}</p>
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
+                    {allUsers.map(user => {
+                      const displayName = user.displayName || user.display_name || user.username
+                      const isAlreadyAdded = participants.some(p => p.id === user.id)
+                      
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => addUserAsParticipant(user)}
+                          disabled={isAlreadyAdded}
+                          type='button'
+                          className={`${participants.includes(user.displayName) ? "bg-teal-100 cursor-not-allowed" : "bg-gray-200 hover:bg-gray-100"} flex flex-row justify-between bg-gray-200 p-2 rounded-lg`}>
+                          <p>{displayName}</p>
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                          </svg>
 
-                      </button>
-                    ))}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
                 <div className='flex flex-col'>
