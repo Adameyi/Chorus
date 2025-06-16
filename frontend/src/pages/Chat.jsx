@@ -7,7 +7,7 @@ import MobileSidebar from "../components/MobileSideBar";
 import UserProfile from '../components/UserProfile';
 import GroupInfo from '../components/GroupInfo';
 import { Send, Users, Phone, Video, Search, Info, Plus, Smile } from 'lucide-react'
-import { chatAPI } from '../services/api'
+import { chatAPI, authAPI } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
 import UserReceiver from '../assets/images/profile2.png'
 import SearchModal from '../components/SearchModal';
@@ -32,25 +32,57 @@ function Chat() {
     const [showGroupChat, setShowGroupChat] = useState(false)
     const [width, setWidth] = useState(window.innerWidth)
 
+    //User States
+    const [currentUser, setCurrentUser] = useState(null)
+    const [userLoading, setUserLoading] = useState(true)
+
+    const messagesEndRef = null;
+
     function handleWindowSizeChange() {
         setWidth(window.innerWidth)
+    }
+
+    const handleInputChange = (e) => {
+        console.log('Typing Message', e.target.value)
     }
 
     useEffect(() => {
         window.addEventListener('resize', handleWindowSizeChange)
         return () => {
-            window.addEventListener('resize', handleWindowSizeChange)
+            window.removeEventListener('resize', handleWindowSizeChange)
         }
     }, [])
 
     const isMobile = width <= 768
 
-    //Mock currentUser
-    const currentUser = { id: 2, username: "sarah_jones" }
+    useEffect(() => {
+        loadChatRooms()
+    }, [currentUser])
 
     useEffect(() => {
-        loadChatRooms();
-    }, [])
+        if (selectedChatRoom) {
+            loadMessages(selectedChatRoom.id)
+        }
+    }, [selectedChatRoom])
+
+    useEffect(() => {
+        const getCurrentUser = async () => {
+            setUserLoading(true)
+            try {
+                const response = await authAPI.getCurrentUser()
+                console.log('Fetched current user:', response.data)
+                //Store only use data
+                setCurrentUser(response)
+                console.log('After setting currentUser:', response.data);
+            } catch (authError) {
+                console.error("Error fetching current user:", authError)
+            } finally {
+                setUserLoading(false)
+            }
+        }
+
+        getCurrentUser()
+    }, []) // Empty dependency array to run once on mount
 
     //Centralized function to load chat rooms.
     const loadChatRooms = async () => {
@@ -101,7 +133,7 @@ function Chat() {
     }
 
     const formatTime = (timestamp) => {
-        return newDate(timestamp).toLocaleTimeString('en-US', {
+        return new Date(timestamp).toLocaleTimeString('en-US', {
             hour: '2-digit',
             minute: '2-digit'
         })
@@ -111,6 +143,9 @@ function Chat() {
         if (room.is_group_chat) {
             return room.name || 'Group Chat'
         } else {
+            if (!currentUser) {
+                return 'Direct Message'
+            }
             const otherParticipant = room.participants.find(p => p.id !== currentUser.id)
             return otherParticipant ? otherParticipant.username : 'Direct Message'
         }
@@ -121,7 +156,7 @@ function Chat() {
         return displayName.includes(searchQuery.toLowerCase())
     })
 
-    if (loading) {
+    if (loading || userLoading) {
         return (
             <div className='flex items-center justify-cetner h-screen bg-gay-100'>
                 <div className='text-xl'> Loading Chat... </div>
@@ -151,19 +186,19 @@ function Chat() {
                 {/* Left-Side Panel */}
                 <div className="bg-slate-200 h-screen sm:flex hidden flex flex-row">
                     <Sidebar />
-                    <div>
+                    <div className='overflow-y-auto overflow-x-hidden'>
                         {/* Chat Member List + Search */}
                         <div className='mt-4 flex flex-row flex-shrink max-w-72 justify-between items-center'>
                             <div className='flex flex-row gap-2 '>
                                 <h1 className='font-bold text-3xl'>Chat</h1>
                             </div>
                             <div className='flex flex-row gap-2'>
-                                <button className='p-2 rounded-lg bg-white' onClick={() => {openModal(), openSearchModal()}}>
+                                <button className='p-2 rounded-lg bg-white' onClick={() => { openModal(), openSearchModal() }}>
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
                                     </svg>
                                 </button>
-                                <button className='p-2 rounded-lg bg-white'  onClick={openModal}>
+                                <button className='p-2 rounded-lg bg-white' onClick={openModal}>
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
@@ -199,10 +234,10 @@ function Chat() {
                                 onClick={() => setSelectedChatRoom(room)}
                             >
                                 <img src={userProfile2} alt="Listed User Profile" className='rounded-lg w-14 h-14' />
-                                <div className='flex flex-col'>
+                                <div className='flex flex-col w-full'>
                                     <div className='flex flex-row justify-between items-center'>
-                                        <h1 className='font-bold'>{getChatRoomDisplayName(room)}</h1>
-                                        <p className='text-gray-500'>{room.last_message.timestamp}</p>
+                                        <h2 className='font-bold text-xs'>{getChatRoomDisplayName(room)}</h2>
+                                        <small className='text-gray-500'>{formatTime(room.last_message.timestamp) || ''}</small>
                                     </div>
                                     <p>{room.last_message ? room.last_message.content : 'No messages yet'}</p>
                                 </div>
@@ -218,7 +253,7 @@ function Chat() {
                         <MobileSidebar />
                         {selectedChatRoom ? (
                             <>
-                                <div className="flex flex-row justify-between items-center shadow-xl h-24 w-full">
+                                <div className="flex justify-between items-center shadow-xl h-24 w-full">
                                     <div className="flex flex-row justify-between gap-3 py-4 px-2">
                                         <img src={groupChatImage} onClick={() => setShowGroupChat(true)} alt="groupChat" className="h-16 w-16 rounded-full"></img>
                                         <div>
@@ -272,78 +307,82 @@ function Chat() {
                                     </div>
                                     {/* End: Group Chat Buttons */}
 
-                                    {/* Chat Box */}
-                                    <div className='p-2 sm:h-full h-[75vh] flex flex-col justify-end overflow-hidden'>
-                                        <div className='overflow-y-auto h-full flex flex-col justify-end'>
-                                            {messages.map((message) => (
-                                                <div key={message.id} className='flex flex-row gap-2 text-sm mt-4'>
-                                                    <img
-                                                        src={UserSender}
-                                                        alt="Profile 1"
-                                                        className='w-16 h-16 rounded-lg'
-                                                        onClick={() => onProfileClick({
-                                                            name: 'Amina Kone',
-                                                            role: 'Content Writer @ Covert Studios',
-                                                            phone: '(+02) 023 456 789',
-                                                            email: 'david.writer@coverts.com',
-                                                            image: UserSender
-                                                        })}
-                                                    />
-                                                    <div className='flex flex-col gap-2'>
-                                                        <div className='bg-slate-200 py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl'>
-                                                            <div className='flex flex-row justify-between items-center'>
-                                                                <h1 className='font-bold text-lg'>{message.sender.id !== currentUser.id && <div>{message.sender.username}</div>}</h1>
-                                                                <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
-                                                            </div>
-                                                            <p>{message.content}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <div ref={messagesEndRef}></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className='flex flex-row p-2'>
-                                    <button className='p-4 absolute text-teal-600'>
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                                        </svg>
-
-                                    </button>
-                                    <input
-                                        className='border-none outline-none text-inherit bg-[#93B2B6] roboto-light placeholder-teal-600 text-white p-4 pl-12 w-full rounded-md'
-                                        type='text'
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
-                                        placeholder={isMobile ? `Type a message...` : `Message @${getChatRoomDisplayName(room)}`}
-                                    />
-                                    <div className='ml-[-5.5rem] flex justify-center items-center gap-2 text-teal-600'>
-                                        <button>
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                                            </svg>
-                                        </button>
-                                        <button>
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <button
-                                        onClick={sendMessage}
-                                        disabled={!newMessage.trim()}
-                                        className='flex justify-center items-center bg-teal-600 text-white w-12 rounded-md ml-6'>
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                                        </svg>
-                                    </button>
                                 </div>
                             </>
                         ) : (
                             <div>Select a conversation to start messaging</div>
                         )}
+                    </div>
+                    {/* Chat Box */}
+                    <div className='p-2 sm:h-full h-[75vh] flex flex-col justify-end overflow-hidden'>
+                        <div className='overflow-y-auto h-full flex flex-col justify-end'>
+                            {messages.map((message) => {
+                                const isCurrentUser = message.sender.id === currentUser.id;
+                                console.log('Message Sender ID:', message.sender.id, 'Current User ID:', currentUser.id)
+                                return (
+                                    <div key={message.id} className='flex flex-row gap-2 text-sm mt-4'>
+                                        <img
+                                            src={UserSender}
+                                            alt="Profile 1"
+                                            className='w-16 h-16 rounded-lg'
+                                            onClick={() => onProfileClick({
+                                                name:  message.sender.username,
+                                                role: 'Content Writer @ Covert Studios',
+                                                phone: '(+02) 023 456 789',
+                                                email: 'david.writer@coverts.com',
+                                                image: UserSender
+                                            })}
+                                        />
+                                        <div className='flex flex-col gap-2'>
+                                            <div className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-200'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
+                                                <div className='flex flex-row justify-between items-center'>
+                                                    <h1 className='font-bold text-lg'>{!isCurrentUser && <div>{message.sender.username}</div>}</h1>
+                                                    <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
+                                                </div>
+                                                <p>{message.content}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                            <div ref={messagesEndRef}></div>
+                        </div>
+                    </div>
+                    <div className='flex flex-row p-2'>
+                        <button className='p-4 absolute text-teal-600'>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                            </svg>
+
+                        </button>
+                        <input
+                            className='border-none outline-none text-inherit bg-[#93B2B6] roboto-light placeholder-teal-600 text-white p-4 pl-12 w-full rounded-md'
+                            type='text'
+                            value={newMessage}
+                            onChange={handleInputChange}
+                            onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
+                            placeholder={isMobile ? `Type a message...` : `Message @${getChatRoomDisplayName(selectedChatRoom)}`}
+                        />
+                        <div className='ml-[-5.5rem] flex justify-center items-center gap-2 text-teal-600'>
+                            <button>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                                </svg>
+                            </button>
+                            <button>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" />
+                                </svg>
+                            </button>
+                        </div>
+                        <button
+                            onClick={sendMessage}
+                            disabled={!newMessage.trim()}
+                            className='flex justify-center items-center bg-teal-600 text-white w-12 rounded-md ml-6'>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                            </svg>
+                        </button>
                     </div>
 
                     {/* Right Panel */}
