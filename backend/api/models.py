@@ -1,10 +1,50 @@
+import os
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator
 from django.utils.timezone import now
 from PIL import Image as PILImage
+from datetime import datetime
 
 # Chat Functionality
+def message_image_upload_path(instance, filename):
+# To generate upload path indexing for message images.
+# URL Format: messages/chat_{chat_name}/chat_{dd/mm/yy}/(filename)
+
+    # Fetch message and chat_room.
+    message = instance.message
+    chat_room = message.chat_room
+    
+    # Format the date as dd/mm/yy.
+    upload_date = datetime.now().strftime('%d_%m_%y') # Underscore for filesys compatibility.
+
+    # Chat Room Cleaner for filesys use.
+    if chat_room.is_group_chat and chat_room.name:
+        
+        # For Group Chat Only: use chat room name:
+        
+        # Iterate through each char whilst keeping alphanumeric chars; Ensure whitespaces aren't included
+        chat_name = "".join(c for c in chat_room.name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        
+        # Replace any remaining spaces with underscores.
+        chat_name = chat_name.replace(' ', '_')
+    else:
+        # For Direct Messages Only: create name based on the 2 included participants.
+        participants = list(chat_room.participants.all().order_by('id'))
+        if len(participants) >= 2:
+            chat_name = f"{participants[0].username}_{participants[1].username}"
+        else:
+            chat_name = f"chat_{chat_room.id}" # e.g., chat_15/
+            
+    # Ensure chat_name is not empty and filesys is safe. This will serve as a backup
+    if not chat_name:
+        chat_name = f"chat_{chat_room.id}"
+
+    # Create URL Path:
+    upload_path = f"messages/chat_{chat_name}/chat_{upload_date}/{filename}"
+    
+    return upload_path
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     display_name = models.CharField(max_length=255, blank=True, null=True) # Display Name should be optional
@@ -85,9 +125,9 @@ class Message(models.Model):
 class MessageImage(models.Model):
     # Handler for image attachments for messages
     message = models.ForeignKey(Message, related_name='images', on_delete=models.CASCADE)
-    image = models.ImageField(upload_to='chat_images/%Y/%m/%d/')
+    image = models.ImageField(upload_to=message_image_upload_path)
     caption = models.CharField(max_length=255, blank=True, null=True) 
-    file_size = models.PositiveIntegerField(editable=False) 
+    file_size = models.PositiveIntegerField(null = True, blank=True, editable=False) 
     img_width = models.PositiveIntegerField(null = True, blank=True, editable=False)
     img_height = models.PositiveIntegerField(null = True, blank=True, editable=False)
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -98,9 +138,11 @@ class MessageImage(models.Model):
     def save(self, *args, **kwargs):
         if self.image:
             self.file_size = self.image.size
-            # Fetch dimensions from uploaded image
-            img = PILImage.open(self.image)
-    
+        super().save(*args, **kwargs)  
+        if self.image:
+            img = PILImage.open(self.image.path)
+            self.img_width, self.img_height = img.size
+            super().save(update_fields=["img_width", "img_height"]) 
  
 class Emotes(models.Model):
     message = models.ForeignKey(Message, related_name='emotes', on_delete=models.CASCADE)
@@ -180,4 +222,3 @@ class TaskAttachment(models.Model):
     
     def __str__(self):
         return self.filename
-    
