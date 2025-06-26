@@ -14,6 +14,8 @@ def message_image_upload_path(instance, filename):
     # Fetch message and chat_room.
     message = instance.message
     chat_room = message.chat_room
+    if not chat_room:
+        raise ValueError("Chat Room does not exist for given message.")
     
     # Format the date as dd/mm/yy.
     upload_date = datetime.now().strftime('%d_%m_%y') # Underscore for filesys compatibility.
@@ -107,7 +109,6 @@ class ChatRoom(models.Model):
             else:
                 return f"Chat ID: {self.id}"
  
- 
 class Message(models.Model):
     chat_room = models.ForeignKey(ChatRoom, related_name='messages', on_delete=models.CASCADE)
     sender = models.ForeignKey(User, related_name='sent_messages', on_delete=models.CASCADE)
@@ -125,7 +126,7 @@ class Message(models.Model):
 class MessageImage(models.Model):
     # Handler for image attachments for messages
     message = models.ForeignKey(Message, related_name='images', on_delete=models.CASCADE)
-    image = models.ImageField(upload_to=message_image_upload_path)
+    image = models.ImageField(upload_to="")
     caption = models.CharField(max_length=255, blank=True, null=True) 
     file_size = models.PositiveIntegerField(null = True, blank=True, editable=False) 
     img_width = models.PositiveIntegerField(null = True, blank=True, editable=False)
@@ -153,8 +154,56 @@ class Emotes(models.Model):
     class Meta:
         # unique_together = ['message', 'sender', 'reaction'] - Depreciated
         constraints = [
-            models.UniqueConstraint(fields=['message','sender','reaction'], name='unqiue_emote_per_user')
+            models.UniqueConstraint(fields=['message','sender','reaction'], name='unique_emote_per_user')
         ]
+        
+# Chat Security 
+
+class ChatRoomKey(models.Model):
+    chat_room = models.ForeignKey('ChatRoom', on_delete=models.CASCADE)
+    is_active=models.BooleanField(default=True)
+    
+    # Base64 Encoded Fernet Key.
+    key = models.BinaryField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    # Version for key rotation.
+    version = models.IntegerField(default=1)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['chat_room','version'], name='unique_key_per_chat_room')
+        ]
+
+class SecureMessageImage(models.Model):
+    # Secure Encrypted Message Image Model.
+    message = models.ForeignKey('Message', related_name='secure_images', on_delete=models.CASCADE)
+    file_encryption = models.FileField(upload_to= 'secure_messages/')
+    original_filename = models.CharField(max_length=255)
+    caption = models.CharField(max_length=255, blank=True, null=True)
+    content_hash = models.CharField(max_length=64) # SHA256
+    file_size = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    encrypted_size = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    img_width = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    img_height = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    uploaded_at = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    
+    # Key tracking (Encryption metadata)
+    key_version = models.IntegerField(default=1) 
+    
+    def get_decrypted_image(self, requesting_user):
+        if not self.message.chat_room.participants.filter(id=requesting_user.id).exists():
+            raise PermissionError("User not authorized to view this image")
+    
+        storage = SecureMessageImage()
+        return storage.decrypt_image(
+            self.file_encryption.name,
+            self.message.chat_room.id,
+            requesting_user.id
+        )
+    
+    class Meta:
+        ordering = ['uploaded_at']
     
 # Task Management Functionality
 
