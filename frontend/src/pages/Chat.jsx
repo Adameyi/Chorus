@@ -1,19 +1,24 @@
 import '../styles/index.css';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react'
 import groupChatImage from '../assets/images/groupChatImage.png'
+import EditImageModal from '../components/EditImageModal'
+import EmoteModal from '../components/emoteModal'
 import userProfile2 from '../assets/images/profile2.png'
 import Sidebar from '../components/Sidebar'
-import MobileSidebar from "../components/MobileSideBar";
-import UserProfile from '../components/UserProfile';
-import GroupInfo from '../components/GroupInfo';
-import { Send, Users, Phone, Video, Search, Info, Plus, Smile } from 'lucide-react'
-import { chatAPI, authAPI } from '../services/api'
+import MobileSidebar from "../components/MobileSideBar"
+import UserProfile from '../components/UserProfile'
+import GroupInfo from '../components/GroupInfo'
+import { Send, Users, Phone, Video, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, IdCard, Flag, MessageCircleReply } from 'lucide-react'
+import { chatAPI, authAPI, getBaseURL } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
-import UserReceiver from '../assets/images/profile2.png'
-import SearchModal from '../components/SearchModal';
+import SearchModal from '../components/SearchModal'
 
 function Chat() {
     const [modalOpen, setModalOpen] = useState(false)
+    const [imageModalOpen, setImageModalOpen] = useState(false)
+    const [emoteModalOpen, setEmoteModalOpen] = useState(false)
+    const [messageModalOpen, setMessageModalOpen] = useState(false)
+
     const [fullSearch, setFullSearch] = useState(false)
 
     const [chatRooms, setChatRooms] = useState([])
@@ -22,9 +27,15 @@ function Chat() {
     const [messages, setMessages] = useState([])
     const [newMessage, setNewMessage] = useState('')
 
+    const [selectedImages, setSelectedImages] = useState([])
+    const [selectedImageForEdit, setSelectedImageForEdit] = useState(null)
+    const [imageCaptions, setImageCaptions] = useState({})
+    const [imagePreviewer, setImagePreviewer] = useState(false)
+    const [selectedMessageForEdit, setSelectedMessageForEdit] = useState(null)
+    const [editableMessageContent, setEditableMessageContent] = useState({})
+
     const [loading, setLoading] = useState(true)
 
-    const [showUserProfile, setShowUserProfile] = useState(false)
     const [selectedUser, setSelectedUser] = useState(null)
     const [searchQuery, setSearchQuery] = useState('')
 
@@ -32,19 +43,46 @@ function Chat() {
     const [showGroupChat, setShowGroupChat] = useState(false)
     const [width, setWidth] = useState(window.innerWidth)
 
+    //Edit Message States
+    const [isHoveredId, setIsHoveredId] = useState(null)
+
     //User States
     const [currentUser, setCurrentUser] = useState(null)
     const [userLoading, setUserLoading] = useState(true)
 
-    const messagesEndRef = null;
+    // Reference to scroll chat box
+    const messagesEndRef = useRef(null);
+
+    // Reference to close message options modal
+    const messageModalRef = useRef(null);
 
     function handleWindowSizeChange() {
         setWidth(window.innerWidth)
     }
 
     const handleInputChange = (e) => {
-        console.log('Typing Message', e.target.value)
+        setNewMessage(e.target.value)
     }
+
+    //Close modal if selected outside.
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            // 2 Conditions:
+            // (messageModalRef) = a React useRef obj pointing to modal element in DOM
+            // if the clicked event is not a child of the modal
+            if (messageModalRef.current && !messageModalRef.current.contains(event.target)) {
+                setMessageModalOpen(false)
+            }
+        }
+
+        if (messageModalOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [messageModalOpen])
 
     useEffect(() => {
         window.addEventListener('resize', handleWindowSizeChange)
@@ -55,15 +93,22 @@ function Chat() {
 
     const isMobile = width <= 768
 
+    //Load Chat rooms with current user
     useEffect(() => {
         loadChatRooms()
     }, [currentUser])
 
+    //Load messages for selectedChatRoom
     useEffect(() => {
         if (selectedChatRoom) {
             loadMessages(selectedChatRoom.id)
         }
     }, [selectedChatRoom])
+
+    // Fixed: Added scroll effect when messages change
+    useEffect(() => {
+        scrollToBottom()
+    }, [messages])
 
     useEffect(() => {
         const getCurrentUser = async () => {
@@ -99,7 +144,6 @@ function Chat() {
             setLoading(false)
         }
     }
-
     // Centralized function to load msg for a specific chat room.
     const loadMessages = async (chatRoomId) => {
         try {
@@ -110,26 +154,156 @@ function Chat() {
         }
     }
 
-    // Centralized function to send msg
-    const sendMessage = async (e) => {
-        e.preventDefault()
-        if (!newMessage.trim() || !selectedChatRoom) return
 
-        const messageContent = newMessage.trim()
-        setNewMessage('')
+    // Handler for file input change.
+    const handleImageSelect = (event) => {
+        const files = Array.from(event.target.files)
+        setSelectedImages(prevImages => [...prevImages, ...files])
 
-        try {
-            const response = await chatAPI.sendMessage(selectedChatRoom.id, messageContent)
-            const newMsg = response.data
-            setMessages(prev => [...prev, newMsg])
-        } catch (error) {
-            console.error('Error sending messages:', error)
+        //Initialize captions for new images
+        const newCaptions = { ...imageCaptions }
+        files.forEach(file => {
+            if (!newCaptions[file.name]) {
+                newCaptions[file.name] = ''
+            }
+        })
+        setImageCaptions(newCaptions)
+    }
+
+    const handleImageUpdate = (updateData) => {
+        const { originalName, newName, caption } = updateData
+
+        // Handler for specified image caption change
+        setImageCaptions(prev => ({
+            ...prev,
+            [originalName]: caption
+        }))
+
+        //Update file name (New File Object)
+        if (newName !== originalName) {
+            setSelectedImages(prev =>
+                prev.map(img => {
+                    if (img.name === originalName) {
+                        //Create a new File obj with new name
+                        const newFile = new File([img], newName, { type: img.type })
+                        return newFile
+                    }
+                    return img
+                })
+            )
+
+            //Update caption key to new name
+            setImageCaptions(prev => {
+                const newCaptions = { ...prev }
+                if (newCaptions[originalName]) {
+                    newCaptions[newName] = newCaptions[originalName]
+                    delete newCaptions[originalName]
+                }
+                return newCaptions
+            })
         }
 
+        const saveImageDataToAPI = async (originalName, newName, caption) => {
+            try {
+                const response = await fetch('api/update-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        originalName,
+                        newName,
+                        caption
+                    })
+                })
+
+                if (!response.ok) {
+                    throw new Error('Failed to update image data')
+                }
+
+                console.log('Image Update Success')
+
+            } catch (imgError) {
+                console.log('Error updating image data to API', imgError)
+            }
+        }
+    }
+
+    const getFullImageUrl = (imageUrl) => {
+        if (!imageUrl) return null
+
+        //If already with a full URL, return as is
+        if (imageUrl.startsWith('http://localhost:8000/')) {
+            return imageUrl
+        }
+
+        const fullImageUrl = `${getBaseURL()}${imageUrl}`
+        //Use the same base URL as your API
+        return fullImageUrl
+    }
+
+    //Remove selected image
+    const removeSelectedImage = (imageToRemove) => {
+        setSelectedImages(prev => prev.filter(img => img !== imageToRemove))
+        setImageCaptions(prev => {
+            const updated = { ...prev }
+            delete updated[imageToRemove.name]
+            return updated
+        })
+    }
+
+    // Centralized function to send msg.
+    const sendMessage = async (e) => {
+        e.preventDefault()
+
+        //Ensure at least a single input: Either text or image is provided.
+        if ((!newMessage.trim() && selectedImages.length === 0) || !selectedChatRoom) return
+
+        //Debug to test image output
+        console.log('Sending message with:', {
+            text: newMessage,
+            images: selectedImages.length,
+            captions: imageCaptions,
+        })
+
+        try {
+            // Create FormData for multipart form data.
+            const formData = new FormData()
+
+            // Add text content.
+            formData.append('content', newMessage)
+
+            // Add images.
+            selectedImages.forEach((image) => {
+                formData.append('images', image)
+            })
+
+            // Add captions with correct key format.
+            Object.entries(imageCaptions).forEach(([imageName, caption]) => {
+                formData.append(`caption_${imageName}`, caption)
+            })
+
+            const response = await chatAPI.sendMessage(selectedChatRoom.id, formData)
+            console.log("Message successfully sent! ", response)
+
+            // Reload/Render messages after sending to see the new message.
+            await loadMessages(selectedChatRoom.id)
+
+            //Clear input fields after post is sucesssful.
+            setNewMessage('') // Reset text input.
+            setSelectedImages([]) // Clear selected images.
+            setImageCaptions({}) // Clear image captions.
+            setImagePreviewer(false)
+        } catch (error) {
+            console.error('Error sending messages or media:', error)
+            console.error('Error details:', error.response?.data)
+        }
     }
 
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+        }
     }
 
     const formatTime = (timestamp) => {
@@ -158,7 +332,7 @@ function Chat() {
 
     if (loading || userLoading) {
         return (
-            <div className='flex items-center justify-cetner h-screen bg-gay-100'>
+            <div className='flex items-center justify-center h-screen bg-gray-100'>
                 <div className='text-xl'> Loading Chat... </div>
             </div>
         )
@@ -178,10 +352,14 @@ function Chat() {
         setFullSearch(true)
     }
 
+    function openImageModal(image) {
+        setSelectedImageForEdit(image)
+        setImageModalOpen(true)
+    }
 
     return (
         <>
-            <div className="grid grid-cols-4">
+            <div className="grid grid-cols-4 ">
 
                 {/* Left-Side Panel */}
                 <div className="bg-slate-200 h-screen sm:flex hidden flex flex-row">
@@ -198,7 +376,7 @@ function Chat() {
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
                                     </svg>
                                 </button>
-                                <button className='p-2 rounded-lg bg-white' onClick={openModal}>
+                                <button className='p-2 rounded-lg bg-white' onClick={() => openModal()}>
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
@@ -219,9 +397,7 @@ function Chat() {
                                 className='bg-[#93B2B6] placeholder-white rounded-lg p-1 pl-8 w-full '
                                 placeholder='Search Conversations...'
                             />
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
-                            </svg>
+                            <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400' />
                         </div>
                         {/* End: Search Bar */}
                         <h2 className='font-bold text-gray-500 text-sm'>MESSAGES</h2>
@@ -314,49 +490,226 @@ function Chat() {
                         )}
                     </div>
                     {/* Chat Box */}
-                    <div className='p-2 sm:h-full h-[75vh] flex flex-col justify-end overflow-hidden'>
-                        <div className='overflow-y-auto h-full flex flex-col justify-end'>
-                            {messages.map((message) => {
-                                const isCurrentUser = message.sender.id === currentUser.id;
-                                console.log('Message Sender ID:', message.sender.id, 'Current User ID:', currentUser.id)
-                                return (
-                                    <div key={message.id} className='flex flex-row gap-2 text-sm mt-4'>
-                                        <img
-                                            src={UserSender}
-                                            alt="Profile 1"
-                                            className='w-16 h-16 rounded-lg'
-                                            onClick={() => onProfileClick({
-                                                name:  message.sender.username,
-                                                role: 'Content Writer @ Covert Studios',
-                                                phone: '(+02) 023 456 789',
-                                                email: 'david.writer@coverts.com',
-                                                image: UserSender
-                                            })}
-                                        />
-                                        <div className='flex flex-col gap-2'>
-                                            <div className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-200'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
-                                                <div className='flex flex-row justify-between items-center'>
-                                                    <h1 className='font-bold text-lg'>{!isCurrentUser && <div>{message.sender.username}</div>}</h1>
-                                                    <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
-                                                </div>
-                                                <p>{message.content}</p>
+                    <div className={`p-2 ${imagePreviewer ? "sm:h-[61dvh] h-[75dvh]" : "sm:h-[82dvh] h-[82dvh]"} overflow-y-scroll`}>
+                        {messages.map((message) => {
+                            const isCurrentUser = message.sender.id === currentUser.id;
+                            return (
+                                <div
+                                    onMouseEnter={(e) => setIsHoveredId(message.id)}
+                                    onMouseLeave={(e) => setIsHoveredId(null)}
+
+                                    key={message.id}
+                                    className='flex flex-row gap-2 text-sm mt-4'>
+                                    <img
+                                        src={UserSender}
+                                        alt="Profile 1"
+                                        className='w-16 h-16 rounded-lg'
+                                        onClick={() => handleProfileClick({
+                                            name: message.sender.username,
+                                            role: 'Content Writer @ Covert Studios',
+                                            phone: '(+02) 023 456 789',
+                                            email: 'david.writer@coverts.com',
+                                            image: UserSender
+                                        })}
+                                    />
+                                    <div className='relative flex flex-col gap-2'>
+                                        {/* Message Options */}
+                                        {isHoveredId === message.id &&
+                                            <div className='absolute gap-1 top-2 right-2 flex flex-row bg-blue-600 rounded-lg p-1 text-gray-200'>
+                                                {messageModalOpen &&
+                                                    <div
+                                                        ref={messageModalRef}
+                                                        className='w-[140%] z-20 p-2 absolute bg-blue-500 rounded-lg shadow-xl flex flex-col gap-4'>
+                                                        <button className='flex flex-row justify-between'>Add Reaction <SmilePlus size={20} /></button>
+                                                        <hr />
+                                                        <button className='flex flex-row justify-between'>Edit Message <Pencil size={20} /></button>
+                                                        <button className='flex flex-row justify-between'>Copy Message <Copy size={20} /></button>
+                                                        <button className='flex flex-row justify-between'>Reply  <MessageCircleReply size={20} /></button>
+                                                        <button className='flex flex-row justify-between'>Forward <CornerUpRight size={20} /></button>
+                                                        <hr />
+                                                        <button className='flex flex-row justify-between'>Pin Message  <Pin size={20} /></button>
+                                                        <button className='flex flex-row justify-between'>Speak Message <Megaphone size={20} /></button>
+                                                        <button className='flex flex-row justify-between'>Copy ID    <IdCard size={20} /></button>
+                                                        <button className='text-red-400 flex flex-row justify-between'>Report Message  <Flag size={20} /> </button>
+
+                                                    </div>
+                                                }
+                                                <SmilePlus size={20} />
+                                                <Pencil size={20} onClick={() => {
+                                                    setSelectedMessageForEdit(message.id)
+                                                    setEditableMessageContent({...editableMessageContent, [message.id]: message.content})
+                                                    }}/>
+                                                <CornerUpLeft size={20} />
+                                                <CornerUpRight size={20} />
+                                                <button onClick={() => setMessageModalOpen(true)}>
+                                                    <Ellipsis size={20} />
+                                                </button>
                                             </div>
+                                        }
+                                        <div
+                                            className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-200'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
+                                            <div className='flex flex-row justify-between items-center'>
+                                                <h1 className='font-bold text-lg'>{!isCurrentUser && <div>{message.sender.username}</div>}</h1>
+                                                <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
+                                            </div>
+                                            {/* Message Content */}
+                                            {message.content &&
+                                                <>
+                                                    {selectedMessageForEdit === message.id ?
+                                                        (<input
+                                                            type="text"
+                                                            value={editableMessageContent[message.id] || ""} 
+                                                            onChange={(e) => setEditableMessageContent({
+                                                                ...editableMessageContent,
+                                                                [message.id]: e.target.value,
+                                                            })}
+                                                            onBlur={() => setSelectedMessageForEdit(null)} //Clear on blur
+                                                        />)
+                                                        :
+                                                        (
+                                                            <p className='mb-2'>
+                                                                {message.content}
+                                                            </p>
+                                                        )
+                                                    }
+                                                </>
+                                            }
+
+
+                                            {/* Message Images */}
+
+                                            {message.images && message.images.length > 0 && (
+                                                <div className='flex flex-col gap-2 mt-2'>
+                                                    {
+
+                                                        message.images.map((image, index) => {
+                                                            const imageUrl = getFullImageUrl(image.image_url || image.image)
+
+                                                            //Image Debug Log
+                                                            if (!imageUrl) {
+                                                                console.warn('No valid image URL found for image: ', image)
+                                                                return null
+                                                            }
+
+                                                            return (
+                                                                <div key={index} className='flex flex-col'>
+                                                                    <img
+                                                                        src={imageUrl}
+                                                                        alt={image.caption || `Image ${index + 1}`}
+                                                                        className='max-w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity'
+                                                                        onClick={() => window.open(imageUrl, '_blank')}
+                                                                    />
+                                                                    {image.caption && (
+                                                                        <p className='text-sm text-gray-600 mt-1 italic'>
+                                                                            {image.caption}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        }
+                                                        )}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                )
-                            })}
-                            <div ref={messagesEndRef}></div>
-                        </div>
+                                </div>
+                            )
+                        })}
+                        <div ref={messagesEndRef}></div>
                     </div>
-                    <div className='flex flex-row p-2'>
-                        <button className='p-4 absolute text-teal-600'>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                            </svg>
 
-                        </button>
+                    {/* Image Previewer */}
+                    {imagePreviewer &&
+                        <div className='absolute bottom-[0vh] bg-[#93B2B6] p-4 pb-12 h-[38vh] w-[92vh] overflow-y-auto'>
+                            <div className='flex flex-row justify-between'>
+                                <h3 className='text-white font-semibold mb-2'>Selected Images ({selectedImages.length})</h3>
+                                <div className='flex items-center'>
+                                    <button
+                                        onClick={() => setImagePreviewer(false)}
+                                        className='text-white hover:text-red-300'
+                                    >
+                                        <X />
+                                    </button>
+                                </div>
+                            </div>
+                            <div className='flex flex-row gap-2'>
+                                {selectedImages.map((image, index) => (
+                                    <div
+                                        key={index}
+                                        className='flex flex-col bg-white/20 p-1 rounded-lg '
+                                    >
+                                        <div className='flex justify-end'>
+                                            <div className='w-1/2 flex justify-center items-center gap-2 p-1'>
+                                                <button
+                                                    onClick={() => openImageModal(image)}
+                                                    className='text-teal-500 hover:text-teal-500'
+                                                >
+                                                    <Pencil />
+                                                </button>
+                                                <button
+                                                    onClick={() => removeSelectedImage(image)}
+                                                    className='text-red-500 hover:text-red-500'
+                                                >
+                                                    <Trash2 />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <img
+                                            src={URL.createObjectURL(image)}
+                                            alt={`Preview ${index}`}
+                                            className='w-32 h-32 object-cover-rounded rounded-lg'
+                                        />
+                                        <div className='flex-1'>
+                                            <small className='text-white text-xs truncate'>
+                                                {image.name}
+                                            </small>
+                                            {/* <input
+                                                type="text"
+                                                placeholder='Add Caption...'
+                                                value={imageCaptions[image.name] || ''}
+                                                onChange={(e) => handleCaptionchange(image.name, e.target.value)}
+                                                className='w-full mt-1 px-2 py-1 text-xs rounded bg-white/30 text-white placeholder-white/70'
+                                            /> */}
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {selectedImages.length === 0 && (
+                                    <p className='text-white/70 text-center py-4'>
+                                        Click here or Drag & Drop images
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    }
+                    <EmoteModal
+                        emoteModalOpen={emoteModalOpen}
+                        setEmoteModalOpen={setEmoteModalOpen}
+                        setNewMessage={setNewMessage}
+                    />
+                    <div className='flex flex-row p-2 absolute bottom-0 w-full sm:w-[92vh]'>
+                        {/* Hidden file input */}
                         <input
-                            className='border-none outline-none text-inherit bg-[#93B2B6] roboto-light placeholder-teal-600 text-white p-4 pl-12 w-full rounded-md'
+                            type="file"
+                            id="imageInput"
+                            multiple
+                            accept="image/*"
+                            onChange={handleImageSelect}
+                            className='hidden'
+                        />
+
+                        {/* Image attachment button */}
+                        <label
+                            onClick={() => setImagePreviewer(true)}
+                            htmlFor="imageInput"
+                            className='p-3 absolute text-teal-600 cursor-pointer hover:bg-teal-100 hover:text-teal-800 rounded-full transition-all duration-200'
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="size-7">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                            </svg>
+                        </label>
+                        <input
+                            className='border-none outline-none text-inherit bg-[#93B2B6] roboto-light placeholder-teal-600 text-white p-4 pl-16 w-full rounded-md'
                             type='text'
                             value={newMessage}
                             onChange={handleInputChange}
@@ -364,12 +717,14 @@ function Chat() {
                             placeholder={isMobile ? `Type a message...` : `Message @${getChatRoomDisplayName(selectedChatRoom)}`}
                         />
                         <div className='ml-[-5.5rem] flex justify-center items-center gap-2 text-teal-600'>
+                            {/* Microphone Button */}
                             <button>
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                                 </svg>
                             </button>
-                            <button>
+                            {/* Emote Button */}
+                            <button onClick={() => setEmoteModalOpen(true)}>
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" />
                                 </svg>
@@ -377,7 +732,7 @@ function Chat() {
                         </div>
                         <button
                             onClick={sendMessage}
-                            disabled={!newMessage.trim()}
+                            disabled={!newMessage.trim() && selectedImages.length === 0}
                             className='flex justify-center items-center bg-teal-600 text-white w-12 rounded-md ml-6'>
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
@@ -398,7 +753,19 @@ function Chat() {
                     </div>
                 </div>
             </div>
-            <SearchModal modalOpen={modalOpen} setModalOpen={setModalOpen} fullSearch={fullSearch} />
+            <SearchModal
+                modalOpen={modalOpen}
+                setModalOpen={setModalOpen}
+                fullSearch={fullSearch}
+            />
+            <EditImageModal
+                imageModalOpen={imageModalOpen}
+                setImageModalOpen={setImageModalOpen}
+                imageName={selectedImageForEdit?.name || ''}
+                imageCaption={imageCaptions[selectedImageForEdit?.name || '']}
+                image={selectedImageForEdit ? URL.createObjectURL(selectedImageForEdit) : ''}
+                onUpdate={handleImageUpdate}
+            />
         </>
     );
 }
