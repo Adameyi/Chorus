@@ -229,6 +229,28 @@ function Chat() {
         }
     }
 
+    const handleSaveEditedMessage = async (messageId) => {
+        const newContent = editableMessageContent[messageId]
+
+        //Prevent saving if input is empty or no room is selected.
+        if (!newContent.trim() || !selectedChatRoom) return
+
+        try {
+            //Call API to update msg content.
+            await chatAPI.editMessage(selectedChatRoom.id, messageId, newContent)
+            
+            // Reload messages to update view
+            await loadMessages(selectedChatRoom.id)
+
+        } catch (msgEditError) {
+            console.error("Failed to edit message:", msgEditError)
+        }
+    }
+
+    const handleDeleteMessage = async (messageId) => {
+         if (!selectedChatRoom) return
+    }
+
     const getFullImageUrl = (imageUrl) => {
         if (!imageUrl) return null
 
@@ -537,8 +559,8 @@ function Chat() {
                                                 <SmilePlus size={20} />
                                                 <Pencil size={20} onClick={() => {
                                                     setSelectedMessageForEdit(message.id)
-                                                    setEditableMessageContent({...editableMessageContent, [message.id]: message.content})
-                                                    }}/>
+                                                    setEditableMessageContent({ ...editableMessageContent, [message.id]: message.content })
+                                                }} />
                                                 <CornerUpLeft size={20} />
                                                 <CornerUpRight size={20} />
                                                 <button onClick={() => setMessageModalOpen(true)}>
@@ -558,12 +580,21 @@ function Chat() {
                                                     {selectedMessageForEdit === message.id ?
                                                         (<input
                                                             type="text"
-                                                            value={editableMessageContent[message.id] || ""} 
+                                                            value={editableMessageContent[message.id] || ""}
                                                             onChange={(e) => setEditableMessageContent({
                                                                 ...editableMessageContent,
                                                                 [message.id]: e.target.value,
                                                             })}
                                                             onBlur={() => setSelectedMessageForEdit(null)} //Clear on blur
+
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    handleSaveEditedMessage(message.id)
+                                                                } else if (e.key === 'Escape') {
+                                                                    setSelectedMessageForEdit(null)
+                                                                }
+                                                            }}
+                                                            autoFocus
                                                         />)
                                                         :
                                                         (
