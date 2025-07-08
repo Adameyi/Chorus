@@ -4,10 +4,18 @@ from django.db.models import Q
 from rest_framework import generics, permissions, status, viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
-from .serializers import UserSerializer, TaskSerializer, UserBasicSerializer, MessageSerializer, ChatRoomSerializer, EmoteSerializer, FriendRequestSerializer, FriendSerializer
+from rest_framework.parsers import MultiPartParser
+from .serializers import UserSerializer, TaskSerializer, UserBasicSerializer, MessageSerializer, MessageImageSerializer, ChatRoomSerializer, EmoteSerializer, FriendRequestSerializer, FriendSerializer
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
-from .models import Task, Column, FriendRequest, Friends, Blocked, ChatRoom, Message, Emotes
+from .models import Task, Column, FriendRequest, Friends, Blocked, ChatRoom, Message, MessageImage, Emotes
 from .utils.bot_utils import GuchiBot
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
 
 class CreateUserView(generics.CreateAPIView):
     queryset = User.objects.all() #List all users to ensure duplicates do not exist.
@@ -134,29 +142,89 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
     
-    # Send message to the chat room
+    # Send message to the chat room.
     @action(detail=True, methods=['post'])
     def send_message(self, request, pk=None):
         chat_room = self.get_object()
-        content = request.data.get('content')
+        content = request.data.get('content', '') # Empty string for image only message.
+        images = request.FILES.getlist('images')
         
-        if not content:
+        if not content.strip() and not images:
             return Response(
                 {
-                    "detail" : "Message content is required"
+                    "detail" : "Message/Image content is required"
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
+            
+        #Create the message.
         message = Message.objects.create(
             chat_room=chat_room,
             sender=request.user,
             content=content
         )
         
-        serializer = MessageSerializer(message)
-        return Response(serializer.data)
+        print(f"Message Created, ID: {message.id}") #Msg Create Debug.
+        
+        #Handle image attachments.
+        for image_file in request.FILES.getlist('images'):
+            print(f"Processing Image: {image_file.name}, size: {image_file.size}") #Image Processing Debug.
+            
+            # Fixed: Get caption using the correct key format that matches the frontend
+            caption_key = f"caption_{image_file.name}"
+            caption = request.data.get(caption_key, '')
+            print(f"Caption for {image_file.name}: '{caption}'") #Caption create Debug.
+            
+            try: 
+                message_image = MessageImage.objects.create(
+                    message=message,
+                    image=image_file,
+                    caption=caption,
+                    file_size=image_file.size,
+                )
+                print(f"MessageImage created successfully with ID: {message_image.id}")
+            except Exception as imgSaveError:
+                print(f"Error creating MessageImage: {str(imgSaveError)}")
+                return Response(
+                    {
+                        "detail" : f"Error saving image: {str(imgSaveError)}"
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+                
+        # Serialize and return message with its images.
+        serializer = MessageSerializer(message, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['put'], url_path='messages/?P<message_id>[^/.]+') 
+    def edit_message(self, request, pk=None, message_id=None):
+        chat_room = self.get_object()
+        
+        try:
+            message = Message.objects.get(id=message_id, chat_room=chat_room)
+        except Message.DoesNotExist:
+            return Response(
+                {
+                    'detail' : 'Message not found'
+                }, 
+                status=status.HTTP_404_NOT_FOUND)
+    
+        # Allow only the sender to edit their own messages.
+        if message.sender != request.user:
+            return Response(
+                {
+                    'detail' : 'User unauthorized to edit this message'
+                }, 
+                status=status.HTTP_403_FORBIDDEN)
+            
+        serializer = MessageSerializer(messsage, data=request.data, partial=True)
+        if serializer.is_valid():    
+            serializer.save()
+            return Response(serializer.data)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
      
-    # Add/Annotate Emote to a message
+    # Add/Annotate Emote to a message.
     @action(detail=True, methods=['post'], url_path='messages/(?P<message_id>[^/.]+)/emotes') 
     def add_emote(self, request, pk=None, message_id=None):
         
