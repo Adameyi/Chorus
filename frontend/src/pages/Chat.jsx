@@ -8,7 +8,7 @@ import Sidebar from '../components/Sidebar'
 import MobileSidebar from "../components/MobileSideBar"
 import UserProfile from '../components/UserProfile'
 import GroupInfo from '../components/GroupInfo'
-import { Send, Users, Phone, Video, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, IdCard, Flag, MessageCircleReply } from 'lucide-react'
+import { Send, Users, Phone, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, IdCard, Flag, MessageCircleReply } from 'lucide-react'
 import { chatAPI, authAPI, getBaseURL } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
 import SearchModal from '../components/SearchModal'
@@ -26,6 +26,11 @@ function Chat() {
 
     const [messages, setMessages] = useState([])
     const [newMessage, setNewMessage] = useState('')
+
+    const [replying, setReplying] = useState(false)
+    const [replyToMessageId, setReplyToMessageId] = useState(null)
+    const [replyToContent, setReplyToContent] = useState('')
+    const [replyToUser, setReplyToUser] = useState('')
 
     const [selectedImages, setSelectedImages] = useState([])
     const [selectedImageForEdit, setSelectedImageForEdit] = useState(null)
@@ -117,7 +122,7 @@ function Chat() {
                 const response = await authAPI.getCurrentUser()
                 console.log('Fetched current user:', response.data)
                 //Store only use data
-                setCurrentUser(response)
+                setCurrentUser(response.data)
                 console.log('After setting currentUser:', response.data);
             } catch (authError) {
                 console.error("Error fetching current user:", authError)
@@ -229,38 +234,15 @@ function Chat() {
         }
     }
 
-    const handleSaveEditedMessage = async (messageId) => {
-        const newContent = editableMessageContent[messageId]
-
-        //Prevent saving if input is empty or no room is selected.
-        if (!newContent.trim() || !selectedChatRoom) return
-
-        try {
-            //Call API to update msg content.
-            await chatAPI.editMessage(selectedChatRoom.id, messageId, newContent)
-            
-            // Reload messages to update view
-            await loadMessages(selectedChatRoom.id)
-
-        } catch (msgEditError) {
-            console.error("Failed to edit message:", msgEditError)
-        }
-    }
-
-    const handleDeleteMessage = async (messageId) => {
-         if (!selectedChatRoom) return
-    }
-
     const getFullImageUrl = (imageUrl) => {
         if (!imageUrl) return null
 
-        //If already with a full URL, return as is
+        // If already with a full URL, return as is
         if (imageUrl.startsWith('http://localhost:8000/')) {
             return imageUrl
         }
 
         const fullImageUrl = `${getBaseURL()}${imageUrl}`
-        //Use the same base URL as your API
         return fullImageUrl
     }
 
@@ -305,6 +287,11 @@ function Chat() {
                 formData.append(`caption_${imageName}`, caption)
             })
 
+            if (replying && replyToMessageId) {
+                formData.append('reply_to', replyToMessageId)
+                console.log('reply_to', replyToMessageId)
+            }
+
             const response = await chatAPI.sendMessage(selectedChatRoom.id, formData)
             console.log("Message successfully sent! ", response)
 
@@ -316,10 +303,51 @@ function Chat() {
             setSelectedImages([]) // Clear selected images.
             setImageCaptions({}) // Clear image captions.
             setImagePreviewer(false)
+            setReplying(false)
+            setReplyToContent('')
+            setReplyToUser('')
+            setReplyToMessageId(null)
+            
         } catch (error) {
             console.error('Error sending messages or media:', error)
             console.error('Error details:', error.response?.data)
         }
+    }
+
+    const handleSaveEditedMessage = async (messageId) => {
+        const newContent = editableMessageContent[messageId]
+
+        //Prevent saving if input is empty or no room is selected.
+        if (!newContent.trim() || !selectedChatRoom) return
+
+        try {
+            //Call API to update msg content.
+            await chatAPI.editMessage(selectedChatRoom.id, messageId, newContent)
+            await loadMessages(selectedChatRoom.id)
+
+        } catch (msgEditError) {
+            console.error("Failed to edit message:", msgEditError)
+        }
+    }
+
+    const handleDeleteMessage = async (messageId) => {
+        if (!selectedChatRoom) return
+
+        try {
+            await chatAPI.removeMessage(selectedChatRoom.id, messageId)
+            await loadMessages(selectedChatRoom.id)
+
+        } catch (msgDeleteError) {
+            console.error("Failed to delete message", msgDeleteError)
+        }
+    }
+
+    const handleReplyMessage = (message) => {
+        setReplying(true)
+        setReplyToMessageId(message.id)
+        setReplyToContent(message.content)
+        setReplyToUser(message.sender.username)
+        setMessageModalOpen(false)
     }
 
     const scrollToBottom = () => {
@@ -541,12 +569,21 @@ function Chat() {
                                                 {messageModalOpen &&
                                                     <div
                                                         ref={messageModalRef}
-                                                        className='w-[140%] z-20 p-2 absolute bg-blue-500 rounded-lg shadow-xl flex flex-col gap-4'>
+                                                        className='w-[140%] z-40 p-2 absolute bg-blue-500 rounded-lg shadow-xl flex flex-col gap-4'>
                                                         <button className='flex flex-row justify-between'>Add Reaction <SmilePlus size={20} /></button>
                                                         <hr />
                                                         <button className='flex flex-row justify-between'>Edit Message <Pencil size={20} /></button>
                                                         <button className='flex flex-row justify-between'>Copy Message <Copy size={20} /></button>
-                                                        <button className='flex flex-row justify-between'>Reply  <MessageCircleReply size={20} /></button>
+                                                        {isCurrentUser &&
+                                                            <button className='flex flex-row justify-between'>Delete Message <Trash2 size={20} /></button>
+                                                        }
+
+                                                        {!isCurrentUser &&
+                                                            <button
+                                                                onClick={() => handleReplyMessage(message)}
+                                                                className='flex flex-row justify-between'>Reply  <MessageCircleReply size={20} />
+                                                            </button>
+                                                        }
                                                         <button className='flex flex-row justify-between'>Forward <CornerUpRight size={20} /></button>
                                                         <hr />
                                                         <button className='flex flex-row justify-between'>Pin Message  <Pin size={20} /></button>
@@ -561,17 +598,30 @@ function Chat() {
                                                     setSelectedMessageForEdit(message.id)
                                                     setEditableMessageContent({ ...editableMessageContent, [message.id]: message.content })
                                                 }} />
-                                                <CornerUpLeft size={20} />
+                                                <button onClick={() => handleReplyMessage(message)}>
+                                                    <CornerUpLeft size={20} />
+                                                </button>
                                                 <CornerUpRight size={20} />
+                                                {message.sender.id === currentUser.id &&
+                                                    <button
+                                                        onClick={() => handleDeleteMessage(message.id)}
+                                                        className='text-red-500'
+                                                    >
+                                                        <Trash2 size={20} />
+                                                    </button>
+                                                }
                                                 <button onClick={() => setMessageModalOpen(true)}>
                                                     <Ellipsis size={20} />
                                                 </button>
                                             </div>
                                         }
                                         <div
-                                            className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-200'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
+                                            className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-400'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
+                                            {message.reply_to && (
+                                                <small className='text-gray-700'><b>@{message.reply_to.sender}</b> <span className='italic truncate'>{message.reply_to.content}</span></small>
+                                            )}
                                             <div className='flex flex-row justify-between items-center'>
-                                                <h1 className='font-bold text-lg'>{!isCurrentUser && <div>{message.sender.username}</div>}</h1>
+                                                <h1 className='font-bold text-lg'>{message.sender.username}</h1>
                                                 <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
                                             </div>
                                             {/* Message Content */}
@@ -608,7 +658,6 @@ function Chat() {
 
 
                                             {/* Message Images */}
-
                                             {message.images && message.images.length > 0 && (
                                                 <div className='flex flex-col gap-2 mt-2'>
                                                     {
@@ -718,57 +767,72 @@ function Chat() {
                         setEmoteModalOpen={setEmoteModalOpen}
                         setNewMessage={setNewMessage}
                     />
-                    <div className='flex flex-row p-2 absolute bottom-0 w-full sm:w-[92vh]'>
-                        {/* Hidden file input */}
-                        <input
-                            type="file"
-                            id="imageInput"
-                            multiple
-                            accept="image/*"
-                            onChange={handleImageSelect}
-                            className='hidden'
-                        />
 
-                        {/* Image attachment button */}
-                        <label
-                            onClick={() => setImagePreviewer(true)}
-                            htmlFor="imageInput"
-                            className='p-3 absolute text-teal-600 cursor-pointer hover:bg-teal-100 hover:text-teal-800 rounded-full transition-all duration-200'
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="size-7">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                            </svg>
-                        </label>
-                        <input
-                            className='border-none outline-none text-inherit bg-[#93B2B6] roboto-light placeholder-teal-600 text-white p-4 pl-16 w-full rounded-md'
-                            type='text'
-                            value={newMessage}
-                            onChange={handleInputChange}
-                            onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
-                            placeholder={isMobile ? `Type a message...` : `Message @${getChatRoomDisplayName(selectedChatRoom)}`}
-                        />
-                        <div className='ml-[-5.5rem] flex justify-center items-center gap-2 text-teal-600'>
-                            {/* Microphone Button */}
-                            <button>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                    <div className='flex flex-col p-2 absolute bottom-0 w-full sm:w-[92vh]'>
+                        {replying &&
+                            <div className=' rounded-lg bg-teal-600 p-2 flex justify-between text-white'>
+                                <span>Replying to <b>{replyToUser}</b></span>
+                                <button
+                                    onClick={() => {
+                                        setReplying(false)
+                                        setReplyToContent('')
+                                        setReplyToMessageId(null)
+                                        setReplyToUser('')
+                                    }}
+                                ><X size={20} /></button> </div>
+                        }
+                        <div className='flex flex-row'>
+                            {/* Hidden file input */}
+                            <input
+                                type="file"
+                                id="imageInput"
+                                multiple
+                                accept="image/*"
+                                onChange={handleImageSelect}
+                                className='hidden'
+                            />
+
+                            {/* Image attachment button */}
+                            <label
+                                onClick={() => setImagePreviewer(true)}
+                                htmlFor="imageInput"
+                                className='p-3 absolute text-teal-600 cursor-pointer hover:bg-teal-100 hover:text-teal-800 rounded-full transition-all duration-200'
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="size-7">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
                                 </svg>
-                            </button>
-                            {/* Emote Button */}
-                            <button onClick={() => setEmoteModalOpen(true)}>
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" />
+                            </label>
+                            <input
+                                className='border-none outline-none text-inherit bg-[#93B2B6] roboto-light placeholder-teal-600 text-white p-4 pl-16 w-full rounded-md'
+                                type='text'
+                                value={newMessage}
+                                onChange={handleInputChange}
+                                onKeyDown={(e) => e.key === 'Enter' && sendMessage(e)}
+                                placeholder={isMobile ? `Type a message...` : `Message @${getChatRoomDisplayName(selectedChatRoom)}`}
+                            />
+                            <div className='ml-[-5.5rem] flex justify-center items-center gap-2 text-teal-600'>
+                                {/* Microphone Button */}
+                                <button>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                                    </svg>
+                                </button>
+                                {/* Emote Button */}
+                                <button onClick={() => setEmoteModalOpen(true)}>
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-8">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 0 1-6.364 0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Zm5.625 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75Zm-.375 0h.008v.015h-.008V9.75Z" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <button
+                                onClick={sendMessage}
+                                disabled={!newMessage.trim() && selectedImages.length === 0}
+                                className='flex justify-center items-center bg-teal-600 text-white w-12 rounded-md ml-6'>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
                                 </svg>
                             </button>
                         </div>
-                        <button
-                            onClick={sendMessage}
-                            disabled={!newMessage.trim() && selectedImages.length === 0}
-                            className='flex justify-center items-center bg-teal-600 text-white w-12 rounded-md ml-6'>
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-                            </svg>
-                        </button>
                     </div>
 
                     {/* Right Panel */}
