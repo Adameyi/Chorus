@@ -2,13 +2,14 @@ import '../styles/index.css';
 import React, { useState, useEffect, useRef } from 'react'
 import groupChatImage from '../assets/images/groupChatImage.png'
 import EditImageModal from '../components/EditImageModal'
+import PinnedMessageModal from '../components/pinnedMessageModal'
 import EmoteModal from '../components/emoteModal'
 import userProfile2 from '../assets/images/profile2.png'
 import Sidebar from '../components/Sidebar'
 import MobileSidebar from "../components/MobileSideBar"
 import UserProfile from '../components/UserProfile'
 import GroupInfo from '../components/GroupInfo'
-import { Send, Users, Phone, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, IdCard, Flag, MessageCircleReply } from 'lucide-react'
+import { Send, Users, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, IdCard, Flag, MessageCircleReply } from 'lucide-react'
 import { chatAPI, authAPI, getBaseURL } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
 import SearchModal from '../components/SearchModal'
@@ -18,6 +19,7 @@ function Chat() {
     const [imageModalOpen, setImageModalOpen] = useState(false)
     const [emoteModalOpen, setEmoteModalOpen] = useState(false)
     const [messageModalOpen, setMessageModalOpen] = useState(false)
+    const [pinnedModalOpen, setPinnedModalOpen] = useState(false)
 
     const [fullSearch, setFullSearch] = useState(false)
 
@@ -60,6 +62,18 @@ function Chat() {
 
     // Reference to close message options modal
     const messageModalRef = useRef(null);
+
+    function speakMessage(text, name) {
+        if(!window.speechSynthesis) {
+        alert('This browser does not support text-to-speech features.')
+        return
+        }
+
+        const utterance = new SpeechSynthesisUtterance(`${name} says ${text}`)
+        utterance.lang = 'en-US'
+        window.speechSynthesis.cancel()
+        window.speechSynthesis.speak(utterance)
+    }
 
     function handleWindowSizeChange() {
         setWidth(window.innerWidth)
@@ -149,6 +163,7 @@ function Chat() {
             setLoading(false)
         }
     }
+
     // Centralized function to load msg for a specific chat room.
     const loadMessages = async (chatRoomId) => {
         try {
@@ -159,6 +174,9 @@ function Chat() {
         }
     }
 
+    const loadPinnedMessages = async (chatRoomId) => {
+
+    }
 
     // Handler for file input change.
     const handleImageSelect = (event) => {
@@ -289,7 +307,6 @@ function Chat() {
 
             if (replying && replyToMessageId) {
                 formData.append('reply_to', replyToMessageId)
-                console.log('reply_to', replyToMessageId)
             }
 
             const response = await chatAPI.sendMessage(selectedChatRoom.id, formData)
@@ -307,7 +324,7 @@ function Chat() {
             setReplyToContent('')
             setReplyToUser('')
             setReplyToMessageId(null)
-            
+
         } catch (error) {
             console.error('Error sending messages or media:', error)
             console.error('Error details:', error.response?.data)
@@ -502,12 +519,12 @@ function Chat() {
                                                 <path fillRule="evenodd" d="M1.5 4.5a3 3 0 0 1 3-3h1.372c.86 0 1.61.586 1.819 1.42l1.105 4.423a1.875 1.875 0 0 1-.694 1.955l-1.293.97c-.135.101-.164.249-.126.352a11.285 11.285 0 0 0 6.697 6.697c.103.038.25.009.352-.126l.97-1.293a1.875 1.875 0 0 1 1.955-.694l4.423 1.105c.834.209 1.42.959 1.42 1.82V19.5a3 3 0 0 1-3 3h-2.25C8.552 22.5 1.5 15.448 1.5 6.75V4.5Z" clipRule="evenodd" />
                                             </svg>
                                         </div>
-                                        {/* Info Button */}
-                                        <div className="flex justify-center items-center lg:hidden">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
-                                            </svg>
-                                        </div>
+                                        {/* Pinned Button */}
+                                        <button 
+                                        onClick={() => pinnedModalOpen(true)}
+                                        className="flex justify-center items-center lg:hidden">
+                                            <Pin />
+                                        </button>
                                         {/* Mobile Collapse */}
                                         <div className="flex flex-row gap-2 hidden sm:flex">
                                             <div className="flex justify-center items-center bg-slate-200 h-12 w-12 rounded-full">
@@ -587,7 +604,9 @@ function Chat() {
                                                         <button className='flex flex-row justify-between'>Forward <CornerUpRight size={20} /></button>
                                                         <hr />
                                                         <button className='flex flex-row justify-between'>Pin Message  <Pin size={20} /></button>
-                                                        <button className='flex flex-row justify-between'>Speak Message <Megaphone size={20} /></button>
+                                                        <button onClick={() => speakMessage(message.content, message.sender.username)}
+                                                        className='flex flex-row justify-between'>Speak Message <Megaphone size={20} />
+                                                        </button>
                                                         <button className='flex flex-row justify-between'>Copy ID    <IdCard size={20} /></button>
                                                         <button className='text-red-400 flex flex-row justify-between'>Report Message  <Flag size={20} /> </button>
 
@@ -654,6 +673,7 @@ function Chat() {
                                                         )
                                                     }
                                                 </>
+                                                
                                             }
 
 
@@ -860,6 +880,9 @@ function Chat() {
                 imageCaption={imageCaptions[selectedImageForEdit?.name || '']}
                 image={selectedImageForEdit ? URL.createObjectURL(selectedImageForEdit) : ''}
                 onUpdate={handleImageUpdate}
+            />
+
+            <PinnedMessageModal
             />
         </>
     );
