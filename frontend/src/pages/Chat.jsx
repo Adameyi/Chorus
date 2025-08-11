@@ -3,13 +3,13 @@ import React, { useState, useEffect, useRef } from 'react'
 import groupChatImage from '../assets/images/groupChatImage.png'
 import EditImageModal from '../components/EditImageModal'
 import PinnedMessageModal from '../components/pinnedMessageModal'
-import EmoteModal from '../components/emoteModal'
+import EmoteModal from '../components/EmoteModal'
 import userProfile2 from '../assets/images/profile2.png'
 import Sidebar from '../components/Sidebar'
 import MobileSidebar from "../components/MobileSideBar"
 import UserProfile from '../components/UserProfile'
 import GroupInfo from '../components/GroupInfo'
-import { Send, Users, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, IdCard, Flag, MessageCircleReply } from 'lucide-react'
+import { Send, Users, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, PinOff, IdCard, Flag, MessageCircleReply } from 'lucide-react'
 import { chatAPI, authAPI, getBaseURL } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
 import SearchModal from '../components/SearchModal'
@@ -25,6 +25,7 @@ function Chat() {
 
     const [chatRooms, setChatRooms] = useState([])
     const [selectedChatRoom, setSelectedChatRoom] = useState(null)
+    const [chatRoomId, setChatRoomId] = useState(null)
 
     const [messages, setMessages] = useState([])
     const [newMessage, setNewMessage] = useState('')
@@ -64,9 +65,9 @@ function Chat() {
     const messageModalRef = useRef(null);
 
     function speakMessage(text, name) {
-        if(!window.speechSynthesis) {
-        alert('This browser does not support text-to-speech features.')
-        return
+        if (!window.speechSynthesis) {
+            alert('This browser does not support text-to-speech features.')
+            return
         }
 
         const utterance = new SpeechSynthesisUtterance(`${name} says ${text}`)
@@ -165,17 +166,14 @@ function Chat() {
     }
 
     // Centralized function to load msg for a specific chat room.
-    const loadMessages = async (chatRoomId) => {
+    const loadMessages = async (id) => {
         try {
-            const response = await chatAPI.getMessages(chatRoomId)
+            const response = await chatAPI.getMessages(id)
             setMessages(response.data)
+            setChatRoomId(id)
         } catch (error) {
             console.error("Error loading messages", error)
         }
-    }
-
-    const loadPinnedMessages = async (chatRoomId) => {
-
     }
 
     // Handler for file input change.
@@ -367,6 +365,32 @@ function Chat() {
         setMessageModalOpen(false)
     }
 
+    const handlePinMessage = async (chatRoomId, messageId, currentUser) => {
+        try {
+            await chatAPI.pinMessage(chatRoomId, messageId)
+            console.log('Pinned Message Saved.')
+            //Refreshed pinned message
+
+            const systemMessageContent = `${currentUser.username} pinned a message to this channel. View all [pinned messages](/%{chatRoomId}/messages/${messageId})`
+
+            const formData = new FormData()
+            formData.append('content', systemMessageContent)
+            await chatAPI.sendMessage(chatRoomId, formData)
+
+            // Refresh pinned messages or chatroom messages
+            await loadMessages(chatRoomId)
+            // await loadPinnedMessages(chatRoomId)
+
+
+        } catch (pinError) {
+            console.error('Error pinning message:', pinError)
+        }
+    }
+
+    const handleRemovePinMessage = async () => {
+        console.log()
+    }
+
     const scrollToBottom = () => {
         if (messagesEndRef.current) {
             messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
@@ -520,18 +544,13 @@ function Chat() {
                                             </svg>
                                         </div>
                                         {/* Pinned Button */}
-                                        <button 
-                                        onClick={() => pinnedModalOpen(true)}
-                                        className="flex justify-center items-center lg:hidden">
+                                        <button
+                                            onClick={() => setPinnedModalOpen(true)}
+                                            className="flex justify-center items-center bg-slate-200 h-12 w-12 rounded-full">
                                             <Pin />
                                         </button>
                                         {/* Mobile Collapse */}
                                         <div className="flex flex-row gap-2 hidden sm:flex">
-                                            <div className="flex justify-center items-center bg-slate-200 h-12 w-12 rounded-full">
-                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
-                                                    <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022ZM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
-                                                </svg>
-                                            </div>
                                             {/* Search Button */}
                                             <div className="flex justify-center items-center bg-slate-200 h-12 w-12 rounded-full">
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="size-6">
@@ -592,7 +611,9 @@ function Chat() {
                                                         <button className='flex flex-row justify-between'>Edit Message <Pencil size={20} /></button>
                                                         <button className='flex flex-row justify-between'>Copy Message <Copy size={20} /></button>
                                                         {isCurrentUser &&
-                                                            <button className='flex flex-row justify-between'>Delete Message <Trash2 size={20} /></button>
+                                                            <button
+                                                                onClick={() => handleDeleteMessage(message.id)}
+                                                                className='flex flex-row justify-between'>Delete Message <Trash2 size={20} /></button>
                                                         }
 
                                                         {!isCurrentUser &&
@@ -603,9 +624,21 @@ function Chat() {
                                                         }
                                                         <button className='flex flex-row justify-between'>Forward <CornerUpRight size={20} /></button>
                                                         <hr />
-                                                        <button className='flex flex-row justify-between'>Pin Message  <Pin size={20} /></button>
-                                                        <button onClick={() => speakMessage(message.content, message.sender.username)}
-                                                        className='flex flex-row justify-between'>Speak Message <Megaphone size={20} />
+                                                        {message.is_pinned ? (
+                                                            <button
+                                                                onClick={() => handleRemovePinMessage(chatRoomId, message.id)}
+                                                                className='flex flex-row justify-between'>Unpin Message  <PinOff size={20} />
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handlePinMessage(chatRoomId, message.id, currentUser)}
+                                                                className='flex flex-row justify-between'>Pin Message  <Pin size={20} />
+                                                            </button>
+                                                        )
+                                                        }
+                                                        <button
+                                                            onClick={() => speakMessage(message.content, message.sender.username)}
+                                                            className='flex flex-row justify-between'>Speak Message <Megaphone size={20} />
                                                         </button>
                                                         <button className='flex flex-row justify-between'>Copy ID    <IdCard size={20} /></button>
                                                         <button className='text-red-400 flex flex-row justify-between'>Report Message  <Flag size={20} /> </button>
@@ -673,7 +706,7 @@ function Chat() {
                                                         )
                                                     }
                                                 </>
-                                                
+
                                             }
 
 
@@ -883,6 +916,16 @@ function Chat() {
             />
 
             <PinnedMessageModal
+                chatRoomId={chatRoomId}
+                pinnedModalOpen={pinnedModalOpen}
+                setPinnedModalOpen={setPinnedModalOpen}
+                // Pass the functions the modal needs
+                onPinMessage={handlePinMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onReplyMessage={handleReplyMessage}
+                currentUser={currentUser}
+                formatTime={formatTime}
+                speakMessage={speakMessage}
             />
         </>
     );
