@@ -127,7 +127,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         context['request'] = self.request
         return context
     
-    # Get ALL messages in a chat  room
+    # Get ALL messages in a chat room
     @action(detail=True, methods=['get'])
     def get_messages(self, request, pk=None):
         chat_room = self.get_object()
@@ -140,6 +140,17 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         unread_messages.update(is_read=True)
 
         serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    
+    # Get ALL pinned messages in a chat room
+    @action(detail=True, methods=['get'])
+    def get_pinned_messages(self, request, pk=None):
+        chat_room = self.get_object()
+        
+        #Retrieve all messsages of current chat room.
+        pinned_messages = Message.objects.filter(chat_room=chat_room, is_pinned=True)
+        
+        serializer = MessageSerializer(pinned_messages, many=True, context={'request': request})
         return Response(serializer.data)
     
     # Send message to the chat room.
@@ -157,11 +168,27 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
             
+        # Reply to message ID (Optional)
+        reply_to_id = request.data.get('reply_to') or request.POST.get('reply_to')
+        reply_to_msg = None
+        
+        if reply_to_id:
+            try:
+                reply_to_msg = Message.objects.get(id=reply_to_id)
+            except Message.DoesNotExist:
+                return Response(
+                    {
+                        "detail" : f"Reply to Message ID (reply_to_id) not found."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
         #Create the message.
         message = Message.objects.create(
             chat_room=chat_room,
             sender=request.user,
-            content=content
+            content=content,
+            reply_to=reply_to_msg
         )
         
         print(f"Message Created, ID: {message.id}") #Msg Create Debug.
@@ -196,7 +223,8 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         serializer = MessageSerializer(message, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
-    @action(detail=True, methods=['put'], url_path='messages/?P<message_id>[^/.]+') 
+    # Edit a message.
+    @action(detail=True, methods=['put'], url_path='messages/(?P<message_id>[^/.]+)') 
     def edit_message(self, request, pk=None, message_id=None):
         chat_room = self.get_object()
         
@@ -213,19 +241,79 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         if message.sender != request.user:
             return Response(
                 {
-                    'detail' : 'User unauthorized to edit this message'
+                    'detail' : 'User is unauthorized to edit this message'
                 }, 
                 status=status.HTTP_403_FORBIDDEN)
-            
-        serializer = MessageSerializer(messsage, data=request.data, partial=True)
+        
+        # Update message before saving.    
+        serializer = MessageSerializer(message, data=request.data, partial=True)
         if serializer.is_valid():    
             serializer.save()
             return Response(serializer.data)
         
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
      
+    # Delete a message. 
+    @action(detail=True, methods=['delete'], url_path='messages/(?P<message_id>[^/.]+)') 
+    def delete_message(self, request, pk=None, message_id=None):
+        chat_room=self.get_object()
+        
+        try:
+            message = Message.objects.get(id=message_id, chat_room=chat_room)
+        except Message.DoesNotExist:
+            return Response(
+                {
+                    'detail' : 'Message not found'
+                }, 
+                status=status.HTTP_404_NOT_FOUND)
+            
+        if message.sender != request.user:
+            return Response(
+                {
+                    'detail' : 'User is unauthorized to delete this message'
+                },
+                status=status.HTTP_403_FORBIDDEN)
+        
+        message.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+     
+    @action(detail=True, methods=['post'], url_path=r'messages/(?P<message_id>[^/.]+)/pin')
+    def pin_message(self, request, pk=None, message_id=None):
+        chat_room=self.get_object()
+        
+        # Check if user exists in specified chat room.
+        if not chat_room.participants.filter(id=request.user.id).exists():
+            return Response(
+                {
+                    'detail': 'You are not an active participant in this chat room'
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            message = Message.objects.get(id=message_id, chat_room=chat_room)
+        except Message.DoesNotExist:
+            return Response(
+                {
+                    'detail' : 'Message not found'
+                }, 
+                status=status.HTTP_404_NOT_FOUND)
+        
+        #Toggle pin status
+        message.is_pinned = not message.is_pinned
+        message.save(update_fields=['is_pinned'])
+        
+        actionToggle = 'pinned' if message.is_pinned else 'unpinned'    
+        return Response(
+            {
+            'detail' : f'Message {actionToggle} successefully!',
+            'is_pinned': message.is_pinned
+            },
+            status=status.HTTP_200_OK)
+
+        
     # Add/Annotate Emote to a message.
-    @action(detail=True, methods=['post'], url_path='messages/(?P<message_id>[^/.]+)/emotes') 
+    @action(detail=True, methods=['post'], url_path=r'messages/(?P<message_id>[^/.]+)/emotes') 
     def add_emote(self, request, pk=None, message_id=None):
         
         chat_room = self.get_object()
