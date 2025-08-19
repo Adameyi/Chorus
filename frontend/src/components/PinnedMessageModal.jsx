@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { chatAPI } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
+import { X } from 'lucide-react';
 
 function PinnedMessageModal({
-    chatRoomId, 
-    pinnedModalOpen, 
+    chatRoomId,
+    pinnedModalOpen,
     setPinnedModalOpen,
     onPinMessage,
     onDeleteMessage,
@@ -12,7 +13,7 @@ function PinnedMessageModal({
     currentUser,
     formatTime,
     speakMessage,
- }) {
+}) {
     const [pinnedMessages, setPinnedMessages] = useState([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState(null)
@@ -25,19 +26,32 @@ function PinnedMessageModal({
 
         chatAPI.getPinnedMessages(chatRoomId)
             .then((res) => {
-                if(!cancelled) setPinnedMessages(res.data)
+                if (!cancelled) setPinnedMessages(res.data)
             })
             .catch((error) => {
                 if (!cancelled) setError(error)
                 console.error("Error fetching pinned messages:", error)
             })
-            .finally(() => {if (!cancelled) setLoading(false)})
+            .finally(() => { if (!cancelled) setLoading(false) })
 
-            return () => { cancelled = true }
+        return () => { cancelled = true }
     }, [pinnedModalOpen, chatRoomId])
 
     function closeModal() {
         setPinnedModalOpen(false)
+    }
+
+    function jumpToMessage() {
+        return (
+            <div className='flex justify-center items-center absolute right-3 bottom-1'>
+                <button className='bg-gray-500 py-1 px-2 rounded-lg border-2 border-gray-400'>
+                    Jump
+                </button>
+                <button className='bg-gray-500 p-1 rounded-lg border-2 border-gray-400'>
+                    <X size={18}/>
+                </button>
+            </div>
+        )
     }
 
     return (
@@ -62,9 +76,6 @@ function PinnedMessageModal({
                                         const isCurrentUser = message.sender.id === currentUser.id;
                                         return (
                                             <div
-                                                onMouseEnter={(e) => setIsHoveredId(message.id)}
-                                                onMouseLeave={(e) => setIsHoveredId(null)}
-
                                                 key={message.id}
                                                 className='flex flex-row gap-2 text-sm mt-4'>
                                                 <img
@@ -75,17 +86,18 @@ function PinnedMessageModal({
                                                 <div className='relative flex flex-col gap-2'>
                                                     {/* Message Options */}
                                                     <div
-                                                        className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-400'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
+                                                        className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-400'} flex flex-col py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
                                                         {message.reply_to && (
                                                             <small className='text-gray-700'><b>@{message.reply_to.sender}</b> <span className='italic truncate'>{message.reply_to.content}</span></small>
                                                         )}
                                                         <div className='flex flex-row justify-between items-center'>
                                                             <h1 className='font-bold text-lg'>{message.sender?.username}</h1>
                                                             <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
-                                                        </div>  
-                                                                                                                    <p className='mb-2'>
-                                                                {message.content}
-                                                            </p>
+                                                        </div>
+                                                        {jumpToMessage()}
+                                                        <p className='mb-2'>
+                                                            {message.content}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </div>
