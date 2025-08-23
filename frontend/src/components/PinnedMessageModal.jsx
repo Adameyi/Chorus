@@ -7,12 +7,15 @@ function PinnedMessageModal({
     chatRoomId,
     pinnedModalOpen,
     setPinnedModalOpen,
-    onPinMessage,
-    onDeleteMessage,
-    onReplyMessage,
+    warningModalOpen,
+    setWarningModalOpen,
+    setMessageTarget,
     currentUser,
+    message,
+    messageId,
     formatTime,
     speakMessage,
+    onJumpToMessage,
 }) {
     const [pinnedMessages, setPinnedMessages] = useState([])
     const [loading, setLoading] = useState(false)
@@ -41,13 +44,17 @@ function PinnedMessageModal({
         setPinnedModalOpen(false)
     }
 
-    function jumpToMessage() {
+    function jumpToMessage(messageId) {
         return (
             <div className='flex justify-center items-center absolute right-3 bottom-1'>
-                <button className='bg-gray-500 py-1 px-2 rounded-lg border-2 border-gray-400'>
+                <button 
+                onClick={() => onJumpToMessage(messageId)}
+                className='bg-gray-500 py-1 px-2 rounded-lg border-2 border-gray-400'>
                     Jump
                 </button>
-                <button className='bg-gray-500 p-1 rounded-lg border-2 border-gray-400'>
+                <button 
+                onClick={() => {setMessageTarget(message), setWarningModalOpen(true), closeModal()}}
+                className='bg-gray-500 p-1 rounded-lg border-2 border-gray-400'>
                     <X size={18}/>
                 </button>
             </div>
@@ -94,7 +101,7 @@ function PinnedMessageModal({
                                                             <h1 className='font-bold text-lg'>{message.sender?.username}</h1>
                                                             <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
                                                         </div>
-                                                        {jumpToMessage()}
+                                                        {jumpToMessage(message.id)}
                                                         <p className='mb-2'>
                                                             {message.content}
                                                         </p>
