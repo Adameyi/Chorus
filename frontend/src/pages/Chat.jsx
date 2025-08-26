@@ -9,10 +9,11 @@ import Sidebar from '../components/Sidebar'
 import MobileSidebar from "../components/MobileSideBar"
 import UserProfile from '../components/UserProfile'
 import GroupInfo from '../components/GroupInfo'
-import { Send, Users, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, PinOff, IdCard, Flag, MessageCircleReply } from 'lucide-react'
+import { Send, Users, Search, Ellipsis, Pencil, Trash2, X, SmilePlus, CornerUpLeft, CornerUpRight, Copy, Megaphone, Pin, PinOff, IdCard, Flag, MessageCircleReply, Cross } from 'lucide-react'
 import { chatAPI, authAPI, getBaseURL } from '../services/api'
 import UserSender from '../assets/images/profile1.png'
 import SearchModal from '../components/SearchModal'
+import WarningModal from '../components/WarningModal';
 
 function Chat() {
     const [modalOpen, setModalOpen] = useState(false)
@@ -20,6 +21,7 @@ function Chat() {
     const [emoteModalOpen, setEmoteModalOpen] = useState(false)
     const [messageModalOpen, setMessageModalOpen] = useState(false)
     const [pinnedModalOpen, setPinnedModalOpen] = useState(false)
+    const [warningModalOpen, setWarningModalOpen] = useState(false)
 
     const [fullSearch, setFullSearch] = useState(false)
 
@@ -32,7 +34,6 @@ function Chat() {
 
     const [replying, setReplying] = useState(false)
     const [replyToMessageId, setReplyToMessageId] = useState(null)
-    const [replyToContent, setReplyToContent] = useState('')
     const [replyToUser, setReplyToUser] = useState('')
 
     const [selectedImages, setSelectedImages] = useState([])
@@ -58,11 +59,43 @@ function Chat() {
     const [currentUser, setCurrentUser] = useState(null)
     const [userLoading, setUserLoading] = useState(true)
 
+     const [messageTarget, setMessageTarget] = useState(null)
+
     // Reference to scroll chat box
     const messagesEndRef = useRef(null);
 
+    // Storage for multiple refs
+    const messageRefs = useRef({})
+
     // Reference to close message options modal
     const messageModalRef = useRef(null);
+
+    const [jumpToMessageId, setJumpToMessageId] = useState(null)
+    const [highlightedMessageId, setHighlightedMessageId] = useState(null)
+
+    //Function to scroll to messageId and highlight text
+    const handleJumpToMessage = (messageId) => {
+        setJumpToMessageId(messageId)
+        setHighlightedMessageId(messageId)
+        setPinnedModalOpen(false)
+
+        setTimeout(() => {
+            setHighlightedMessageId(null)
+            setJumpToMessageId(null)
+        }, 3000)
+    }
+
+    useEffect(() => {
+        if (jumpToMessageId) {
+            const messageElement = messageRefs.current[jumpToMessageId]
+            if (messageElement) {
+                messageElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                })
+            }
+        }
+    }, [jumpToMessageId])
 
     function speakMessage(text, name) {
         if (!window.speechSynthesis) {
@@ -345,6 +378,10 @@ function Chat() {
         }
     }
 
+    const handleWarning = async (messageId) => {
+
+    }
+
     const handleDeleteMessage = async (messageId) => {
         if (!selectedChatRoom) return
 
@@ -371,7 +408,7 @@ function Chat() {
             console.log('Pinned Message Saved.')
             //Refreshed pinned message
 
-            const systemMessageContent = `${currentUser.username} pinned a message to this channel. View all [pinned messages](/%{chatRoomId}/messages/${messageId})`
+            const systemMessageContent = `${currentUser.username} pinned a message to this channel. View all [pinned messages])`
 
             const formData = new FormData()
             formData.append('content', systemMessageContent)
@@ -397,12 +434,70 @@ function Chat() {
         }
     }
 
-    const formatTime = (timestamp) => {
-        return new Date(timestamp).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-        })
+    const formatTime = (timestamp, mode = 'time') => {
+        const messageDate = new Date(timestamp)
+        const now = new Date()
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        const yesterday = new Date(today)
+        yesterday.setDate(yesterday.getDate() - 1) // Offset by -1 Day from Today
+
+        const messageDateOnly = new Date(messageDate.getFullYear(), messageDate.getMonth(), messageDate.getDate())
+
+        //Format (Today): 4:28AM
+        const isToday = messageDateOnly.getTime() === today.getTime()
+
+        //Format (Today): Yesterday At 4:28AM
+        const isYesterday = messageDateOnly.getTime() === yesterday.getTime()
+
+        if (mode === 'time') {
+            const timeString = messageDate.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            })
+
+            if (isToday) return timeString
+            if (isYesterday) return `Yesterday at ${timeString}`
+
+            //Format (+2 Days): 20/08/2025 4:28AM
+            const dateString = messageDate.toLocaleDateString('en-AU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            })
+            return `${dateString} ${timeString}`
+        }
+
+        if (mode === 'divider') {
+            if (isToday) return 'Today'
+            if (isYesterday) return 'Yesterday'
+
+            //Format (+2 Days): 20/08/2025 4:28AM
+            return messageDate.toLocaleDateString('en-AU', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            })
+        }
     }
+
+    const displayDateDividerCheck = (currentMessage, previousMessage) => {
+        if (!previousMessage) return true //Always display divider for initial message
+
+        // Extract just the date (YYYY-MM-DD) as strings for comparison
+        const currentDate = new Date(currentMessage.timestamp).toDateString()
+        const previousDate = new Date(previousMessage.timestamp).toDateString()
+
+        return currentDate !== previousDate
+    }
+
+    const DateDivider = ({ date }) => (
+        <div className='flex items-center my-6'>
+            <div className='flex-grow border-t border-gray-300' />
+            <span className='mx-4 text-gray-500'>{date}</span>
+            <div className='flex-grow border-t border-gray-300' />
+        </div>
+    )
 
     const getChatRoomDisplayName = (room) => {
         if (room.is_group_chat) {
@@ -577,179 +672,190 @@ function Chat() {
                     </div>
                     {/* Chat Box */}
                     <div className={`p-2 ${imagePreviewer ? "sm:h-[61dvh] h-[75dvh]" : "sm:h-[82dvh] h-[82dvh]"} overflow-y-scroll`}>
-                        {messages.map((message) => {
-                            const isCurrentUser = message.sender.id === currentUser.id;
+                        {messages.map((message, index) => {
+                            const isCurrentUser = message.sender.id === currentUser.id
+                            const isHighlighted = highlightedMessageId === message.id
+                            const previousMessage = index > 0 ? messages[index - 1] : null
+                            const displayDateDivider = displayDateDividerCheck(message, previousMessage)
                             return (
-                                <div
-                                    onMouseEnter={(e) => setIsHoveredId(message.id)}
-                                    onMouseLeave={(e) => setIsHoveredId(null)}
+                                <React.Fragment key={message.id}>
+                                    {displayDateDivider &&
+                                        <DateDivider date={formatTime(message.timestamp, 'divider')} />
+                                    }
+                                    <div
+                                        //For each message, store its DOM element
+                                        ref={(el) => messageRefs.current[message.id] = el}
+                                        onMouseEnter={(e) => setIsHoveredId(message.id)}
+                                        onMouseLeave={(e) => setIsHoveredId(null)}
 
-                                    key={message.id}
-                                    className='flex flex-row gap-2 text-sm mt-4'>
-                                    <img
-                                        src={UserSender}
-                                        alt="Profile 1"
-                                        className='w-16 h-16 rounded-lg'
-                                        onClick={() => handleProfileClick({
-                                            name: message.sender.username,
-                                            role: 'Content Writer @ Covert Studios',
-                                            phone: '(+02) 023 456 789',
-                                            email: 'david.writer@coverts.com',
-                                            image: UserSender
-                                        })}
-                                    />
-                                    <div className='relative flex flex-col gap-2'>
-                                        {/* Message Options */}
-                                        {isHoveredId === message.id &&
-                                            <div className='absolute gap-1 top-2 right-2 flex flex-row bg-blue-600 rounded-lg p-1 text-gray-200'>
-                                                {messageModalOpen &&
-                                                    <div
-                                                        ref={messageModalRef}
-                                                        className='w-[140%] z-40 p-2 absolute bg-blue-500 rounded-lg shadow-xl flex flex-col gap-4'>
-                                                        <button className='flex flex-row justify-between'>Add Reaction <SmilePlus size={20} /></button>
-                                                        <hr />
-                                                        <button className='flex flex-row justify-between'>Edit Message <Pencil size={20} /></button>
-                                                        <button className='flex flex-row justify-between'>Copy Message <Copy size={20} /></button>
-                                                        {isCurrentUser &&
-                                                            <button
-                                                                onClick={() => handleDeleteMessage(message.id)}
-                                                                className='flex flex-row justify-between'>Delete Message <Trash2 size={20} /></button>
-                                                        }
-
-                                                        {!isCurrentUser &&
-                                                            <button
-                                                                onClick={() => handleReplyMessage(message)}
-                                                                className='flex flex-row justify-between'>Reply  <MessageCircleReply size={20} />
-                                                            </button>
-                                                        }
-                                                        <button className='flex flex-row justify-between'>Forward <CornerUpRight size={20} /></button>
-                                                        <hr />
-                                                        {message.is_pinned ? (
-                                                            <button
-                                                                onClick={() => handleRemovePinMessage(chatRoomId, message.id)}
-                                                                className='flex flex-row justify-between'>Unpin Message  <PinOff size={20} />
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => handlePinMessage(chatRoomId, message.id, currentUser)}
-                                                                className='flex flex-row justify-between'>Pin Message  <Pin size={20} />
-                                                            </button>
-                                                        )
-                                                        }
-                                                        <button
-                                                            onClick={() => speakMessage(message.content, message.sender.username)}
-                                                            className='flex flex-row justify-between'>Speak Message <Megaphone size={20} />
-                                                        </button>
-                                                        <button className='flex flex-row justify-between'>Copy ID    <IdCard size={20} /></button>
-                                                        <button className='text-red-400 flex flex-row justify-between'>Report Message  <Flag size={20} /> </button>
-
-                                                    </div>
-                                                }
-                                                <SmilePlus size={20} />
-                                                <Pencil size={20} onClick={() => {
-                                                    setSelectedMessageForEdit(message.id)
-                                                    setEditableMessageContent({ ...editableMessageContent, [message.id]: message.content })
-                                                }} />
-                                                <button onClick={() => handleReplyMessage(message)}>
-                                                    <CornerUpLeft size={20} />
-                                                </button>
-                                                <CornerUpRight size={20} />
-                                                {message.sender.id === currentUser.id &&
-                                                    <button
-                                                        onClick={() => handleDeleteMessage(message.id)}
-                                                        className='text-red-500'
-                                                    >
-                                                        <Trash2 size={20} />
-                                                    </button>
-                                                }
-                                                <button onClick={() => setMessageModalOpen(true)}>
-                                                    <Ellipsis size={20} />
-                                                </button>
-                                            </div>
-                                        }
-                                        <div
-                                            className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-400'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
-                                            {message.reply_to && (
-                                                <small className='text-gray-700'><b>@{message.reply_to.sender}</b> <span className='italic truncate'>{message.reply_to.content}</span></small>
-                                            )}
-                                            <div className='flex flex-row justify-between items-center'>
-                                                <h1 className='font-bold text-lg'>{message.sender.username}</h1>
-                                                <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
-                                            </div>
-                                            {/* Message Content */}
-                                            {message.content &&
-                                                <>
-                                                    {selectedMessageForEdit === message.id ?
-                                                        (<input
-                                                            type="text"
-                                                            value={editableMessageContent[message.id] || ""}
-                                                            onChange={(e) => setEditableMessageContent({
-                                                                ...editableMessageContent,
-                                                                [message.id]: e.target.value,
-                                                            })}
-                                                            onBlur={() => setSelectedMessageForEdit(null)} //Clear on blur
-
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    handleSaveEditedMessage(message.id)
-                                                                } else if (e.key === 'Escape') {
-                                                                    setSelectedMessageForEdit(null)
-                                                                }
-                                                            }}
-                                                            autoFocus
-                                                        />)
-                                                        :
-                                                        (
-                                                            <p className='mb-2'>
-                                                                {message.content}
-                                                            </p>
-                                                        )
-                                                    }
-                                                </>
-
-                                            }
-
-
-                                            {/* Message Images */}
-                                            {message.images && message.images.length > 0 && (
-                                                <div className='flex flex-col gap-2 mt-2'>
-                                                    {
-
-                                                        message.images.map((image, index) => {
-                                                            const imageUrl = getFullImageUrl(image.image_url || image.image)
-
-                                                            //Image Debug Log
-                                                            if (!imageUrl) {
-                                                                console.warn('No valid image URL found for image: ', image)
-                                                                return null
+                                        // key={message.id}
+                                        className='flex flex-row gap-2 text-sm mt-4'>
+                                        <img
+                                            src={UserSender}
+                                            alt="Profile 1"
+                                            className='w-16 h-16 rounded-lg'
+                                            onClick={() => handleProfileClick({
+                                                name: message.sender.username,
+                                                role: 'Content Writer @ Covert Studios',
+                                                phone: '(+02) 023 456 789',
+                                                email: 'david.writer@coverts.com',
+                                                image: UserSender
+                                            })}
+                                        />
+                                        <div className='relative flex flex-col gap-2'>
+                                            {/* Message Options */}
+                                            {isHoveredId === message.id &&
+                                                <div className='absolute gap-1 top-2 right-2 flex flex-row bg-blue-600 rounded-lg p-1 text-gray-200'>
+                                                    {messageModalOpen &&
+                                                        <div
+                                                            ref={messageModalRef}
+                                                            className='w-[140%] z-40 p-2 absolute bg-blue-500 rounded-lg shadow-xl flex flex-col gap-4'>
+                                                            <button className='flex flex-row justify-between'>Add Reaction <SmilePlus size={20} /></button>
+                                                            <hr />
+                                                            <button className='flex flex-row justify-between'>Edit Message <Pencil size={20} /></button>
+                                                            <button className='flex flex-row justify-between'>Copy Message <Copy size={20} /></button>
+                                                            {isCurrentUser &&
+                                                                <button
+                                                                    onClick={() => {setMessageTarget(message), setWarningModalOpen(true)}}
+                                                                    className='flex flex-row justify-between'>Delete Message <Trash2 size={20} /></button>
                                                             }
 
-                                                            return (
-                                                                <div key={index} className='flex flex-col'>
-                                                                    <img
-                                                                        src={imageUrl}
-                                                                        alt={image.caption || `Image ${index + 1}`}
-                                                                        className='max-w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity'
-                                                                        onClick={() => window.open(imageUrl, '_blank')}
-                                                                    />
-                                                                    {image.caption && (
-                                                                        <p className='text-sm text-gray-600 mt-1 italic'>
-                                                                            {image.caption}
-                                                                        </p>
-                                                                    )}
-                                                                </div>
+                                                            {!isCurrentUser &&
+                                                                <button
+                                                                    onClick={() => handleReplyMessage(message)}
+                                                                    className='flex flex-row justify-between'>Reply  <MessageCircleReply size={20} />
+                                                                </button>
+                                                            }
+                                                            <button className='flex flex-row justify-between'>Forward <CornerUpRight size={20} /></button>
+                                                            <hr />
+                                                            {message.is_pinned ? (
+                                                                <button
+                                                                    onClick={() => handlePinMessage(chatRoomId, message.id, currentUser)}
+                                                                    className='flex flex-row justify-between'>Unpin Message  <PinOff size={20} />
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handlePinMessage(chatRoomId, message.id, currentUser)}
+                                                                    className='flex flex-row justify-between'>Pin Message  <Pin size={20} />
+                                                                </button>
+                                                            )
+                                                            }
+                                                            <button
+                                                                onClick={() => speakMessage(message.content, message.sender.username)}
+                                                                className='flex flex-row justify-between'>Speak Message <Megaphone size={20} />
+                                                            </button>
+                                                            <button className='flex flex-row justify-between'>Copy ID    <IdCard size={20} /></button>
+                                                            <button className='text-red-400 flex flex-row justify-between'>Report Message  <Flag size={20} /> </button>
+
+                                                        </div>
+                                                    }
+                                                    <SmilePlus size={20} />
+                                                    <Pencil size={20} onClick={() => {
+                                                        setSelectedMessageForEdit(message.id)
+                                                        setEditableMessageContent({ ...editableMessageContent, [message.id]: message.content })
+                                                    }} />
+                                                    <button onClick={() => handleReplyMessage(message)}>
+                                                        <CornerUpLeft size={20} />
+                                                    </button>
+                                                    <CornerUpRight size={20} />
+                                                    {message.sender.id === currentUser.id &&
+                                                        <button
+                                                            onClick={() => {setMessageTarget(message), setWarningModalOpen(true)}}
+                                                            className='text-red-500'
+                                                        >
+                                                            <Trash2 size={20} />
+                                                        </button>
+                                                    }
+                                                    <button onClick={() => setMessageModalOpen(true)}>
+                                                        <Ellipsis size={20} />
+                                                    </button>
+                                                </div>
+                                            }
+                                            <div
+                                                className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-400'} py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
+                                                {message.reply_to && (
+                                                    <small className='text-gray-700'><b>@{message.reply_to.sender}</b> <span className='italic truncate'>{message.reply_to.content}</span></small>
+                                                )}
+                                                <div className='flex flex-row justify-between items-center'>
+                                                    <h1 className='font-bold text-lg'>{message.sender.username}</h1>
+                                                    <span className='text-slate-500'>{formatTime(message.timestamp, 'time')}</span>
+                                                </div>
+                                                {/* Message Content */}
+                                                {message.content &&
+                                                    <>
+                                                        {selectedMessageForEdit === message.id ?
+                                                            (<input
+                                                                type="text"
+                                                                value={editableMessageContent[message.id] || ""}
+                                                                onChange={(e) => setEditableMessageContent({
+                                                                    ...editableMessageContent,
+                                                                    [message.id]: e.target.value,
+                                                                })}
+                                                                onBlur={() => setSelectedMessageForEdit(null)} //Clear on blur
+
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') {
+                                                                        handleSaveEditedMessage(message.id)
+                                                                    } else if (e.key === 'Escape') {
+                                                                        setSelectedMessageForEdit(null)
+                                                                    }
+                                                                }}
+                                                                autoFocus
+                                                            />)
+                                                            :
+                                                            (
+                                                                <p className={`mb-2 ${isHighlighted ? 'bg-yellow-300' : ''}`}>
+                                                                    {message.content}
+                                                                </p>
                                                             )
                                                         }
-                                                        )}
-                                                </div>
-                                            )}
+                                                    </>
+
+                                                }
+
+
+                                                {/* Message Images */}
+                                                {message.images && message.images.length > 0 && (
+                                                    <div className='flex flex-col gap-2 mt-2'>
+                                                        {
+
+                                                            message.images.map((image, index) => {
+                                                                const imageUrl = getFullImageUrl(image.image_url || image.image)
+
+                                                                //Image Debug Log
+                                                                if (!imageUrl) {
+                                                                    console.warn('No valid image URL found for image: ', image)
+                                                                    return null
+                                                                }
+
+                                                                return (
+                                                                    <div key={index} className='flex flex-col'>
+                                                                        <img
+                                                                            src={imageUrl}
+                                                                            alt={image.caption || `Image ${index + 1}`}
+                                                                            className='max-w-full h-auto rounded-lg cursor-pointer hover:opacity-90 transition-opacity'
+                                                                            onClick={() => window.open(imageUrl, '_blank')}
+                                                                        />
+                                                                        {image.caption && (
+                                                                            <p className='text-sm text-gray-600 mt-1 italic'>
+                                                                                {image.caption}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                )
+                                                            }
+                                                            )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                </React.Fragment>
                             )
                         })}
                         <div ref={messagesEndRef}></div>
                     </div>
+
 
                     {/* Image Previewer */}
                     {imagePreviewer &&
@@ -919,13 +1025,26 @@ function Chat() {
                 chatRoomId={chatRoomId}
                 pinnedModalOpen={pinnedModalOpen}
                 setPinnedModalOpen={setPinnedModalOpen}
-                // Pass the functions the modal needs
-                onPinMessage={handlePinMessage}
-                onDeleteMessage={handleDeleteMessage}
-                onReplyMessage={handleReplyMessage}
+                warningModalOpen={warningModalOpen}
+                setWarningModalOpen={setWarningModalOpen}
+                setMessageTarget={setMessageTarget}
                 currentUser={currentUser}
+                message={messageTarget}
+                messageId={messageTarget?.id}
                 formatTime={formatTime}
                 speakMessage={speakMessage}
+                onJumpToMessage={handleJumpToMessage}
+            />
+            <WarningModal
+                chatRoomId={chatRoomId}
+                warningModalOpen={warningModalOpen}
+                setWarningModalOpen={setWarningModalOpen}
+                currentUser={currentUser}
+                message={messageTarget}
+                messageId={messageTarget?.id}
+                handleDeleteMessage={handleDeleteMessage}
+                formatTime={formatTime}
+                mode={warningMode}
             />
         </>
     );
