@@ -16,6 +16,7 @@ function PinnedMessageModal({
     formatTime,
     speakMessage,
     onJumpToMessage,
+    setWarningMode,
 }) {
     const [pinnedMessages, setPinnedMessages] = useState([])
     const [loading, setLoading] = useState(false)
@@ -44,16 +45,16 @@ function PinnedMessageModal({
         setPinnedModalOpen(false)
     }
 
-    function jumpToMessage(messageId) {
+    function jumpToMessage(pinnedMessage) {
         return (
             <div className='flex justify-center items-center absolute right-3 bottom-1'>
                 <button 
-                onClick={() => onJumpToMessage(messageId)}
+                onClick={() => onJumpToMessage(pinnedMssage.id)}
                 className='bg-gray-500 py-1 px-2 rounded-lg border-2 border-gray-400'>
                     Jump
                 </button>
                 <button 
-                onClick={() => {setMessageTarget(message), setWarningModalOpen(true), closeModal()}}
+                onClick={() => {setMessageTarget(pinnedMessage), setWarningMode("unpin"), setWarningModalOpen(true), closeModal()}}
                 className='bg-gray-500 p-1 rounded-lg border-2 border-gray-400'>
                     <X size={18}/>
                 </button>
@@ -79,11 +80,11 @@ function PinnedMessageModal({
                                 {!error && pinnedMessages.length === 0 ? (
                                     <p className='text-gray-500'>No pinned messages yet.</p>
                                 ) : (
-                                    pinnedMessages.map((message) => {
-                                        const isCurrentUser = message.sender.id === currentUser.id;
+                                    pinnedMessages.map((pinnedMessage) => {
+                                        const isCurrentUser = pinnedMessage.sender.id === currentUser.id;
                                         return (
                                             <div
-                                                key={message.id}
+                                                key={pinnedMessage.id}
                                                 className='flex flex-row gap-2 text-sm mt-4'>
                                                 <img
                                                     src={UserSender}
@@ -94,16 +95,16 @@ function PinnedMessageModal({
                                                     {/* Message Options */}
                                                     <div
                                                         className={` ${!isCurrentUser ? 'bg-blue-400' : 'bg-slate-400'} flex flex-col py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
-                                                        {message.reply_to && (
-                                                            <small className='text-gray-700'><b>@{message.reply_to.sender}</b> <span className='italic truncate'>{message.reply_to.content}</span></small>
+                                                        {pinnedMessage.reply_to && (
+                                                            <small className='text-gray-700'><b>@{pinnedMessage.reply_to.sender}</b> <span className='italic truncate'>{pinnedMessage.reply_to.content}</span></small>
                                                         )}
                                                         <div className='flex flex-row justify-between items-center'>
-                                                            <h1 className='font-bold text-lg'>{message.sender?.username}</h1>
-                                                            <span className='text-slate-500'>{formatTime(message.timestamp)}</span>
+                                                            <h1 className='font-bold text-lg'>{pinnedMessage.sender?.username}</h1>
+                                                            <span className='text-slate-500'>{formatTime(pinnedMessage.timestamp)}</span>
                                                         </div>
-                                                        {jumpToMessage(message.id)}
+                                                        {jumpToMessage(pinnedMessage)}
                                                         <p className='mb-2'>
-                                                            {message.content}
+                                                            {pinnedMessage.content}
                                                         </p>
                                                     </div>
                                                 </div>

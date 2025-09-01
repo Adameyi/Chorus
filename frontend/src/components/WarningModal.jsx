@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react'
+import { chatAPI } from '../services/api'
+import UserSender from '../assets/images/profile1.png'
 import { X } from 'lucide-react';
+
 
 function WarningModal({
     chatRoomId,
@@ -8,12 +11,22 @@ function WarningModal({
     currentUser,
     message,
     messageId,
+    handlePinMessage,
     handleDeleteMessage,
     formatTime,
+    mode,
 }) {
     //Do not render warning msg if closed
     if (!warningModalOpen || !message) return null
 
+    useEffect(() => {
+            if (!warningModalOpen) return
+            let cancelled = false;
+    
+            chatAPI.getPinnedMessages(chatRoomId)
+            return () => { cancelled = true }
+        }, [warningModalOpen, chatRoomId])
+    
     function closeModal() {
         setWarningModalOpen(false)
     }
@@ -25,12 +38,12 @@ function WarningModal({
                 onClick={(e) => e.stopPropagation()}
                 className='bg-white w-1/3 space-y-5 p-6'>
                 <div className='flex justify-between'>
-                    <h1 className='sm:text-2xl'>{`${handleDeleteMessage ? 'Delete' : 'Unpin' }  Message` }</h1>
+                    <h1 className='sm:text-2xl'>{mode === 'delete' ? 'Delete Message' : 'Unpin Message' }</h1>
                     <button
                         onClick={() => closeModal()}
                     ><X /></button>
                 </div>
-                <p> Are you sure you want to delete this message?</p>
+                <p>{mode === 'delete' ? 'Are you sure you want to delete this message?' : 'Are you sure you want to unpin this message?' }</p>
                 <div
                     className={` ${!currentUser ? 'bg-blue-400' : 'bg-slate-400'} flex flex-col py-2 px-4 sm:w-96 rounded-tr-2xl rounded-bl-2xl`}>
                     {message.reply_to && (
@@ -49,9 +62,15 @@ function WarningModal({
                         onClick={() => closeModal()}
                         className='bg-gray-800 px-2 py-3 rounded-lg w-1/2 hover:bg-gray-500'
                     >Cancel</button>
+                    {mode === 'delete' ?
                     <button
                         onClick={() => {handleDeleteMessage(message.id), closeModal()}}
                         className='bg-red-800 px-2 py-3 rounded-lg w-1/2 hover:bg-red-500'>Delete</button>
+                    :
+                        <button
+                        onClick={() => {handlePinMessage(chatRoomId, message.id, currentUser), closeModal()}}
+                        className='bg-red-800 px-2 py-3 rounded-lg w-1/2 hover:bg-red-500'>Unpin</button>
+                    }
                 </div>
             </div>
         </div>
