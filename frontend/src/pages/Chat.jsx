@@ -22,6 +22,7 @@ function Chat() {
     const [messageModalOpen, setMessageModalOpen] = useState(false)
     const [pinnedModalOpen, setPinnedModalOpen] = useState(false)
     const [warningModalOpen, setWarningModalOpen] = useState(false)
+    const [warningMode, setWarningMode] = useState(null)
 
     const [fullSearch, setFullSearch] = useState(false)
 
@@ -107,6 +108,43 @@ function Chat() {
         utterance.lang = 'en-US'
         window.speechSynthesis.cancel()
         window.speechSynthesis.speak(utterance)
+    }
+
+    const renderMessageContent = (content) => {
+        const linkPattern= /\[([^\]]+)\]/g;
+
+        //Return as-is if no bracket text is found.
+        if (!linkPattern.test(content)) {
+            return content
+        }
+
+        const parts = content.split(linkPattern)
+        const elements = []
+
+        for (let i = 0; i < parts.length; i++) {
+            if (i % 2 === 0) {
+                if (parts[i]) {
+                    elements.push(parts[i])
+                }
+            } else {
+                //BracketedText (Make it clickable)
+                const linkedText = parts[i]
+                if (linkedText.toLowerCase().includes('pinned messages')) {
+                    elements.push(
+                        <button
+                            key={i}
+                            onClick={() => setPinnedModalOpen(true)}
+                            className='text-blue-600 underline hover:text-blue-900'
+                        >
+                            {linkedText}
+                        </button>
+                    )
+                } else {
+                    elements.push(`[${linkedText}]`)
+                }
+            }
+        }
+        return elements
     }
 
     function handleWindowSizeChange() {
@@ -404,16 +442,18 @@ function Chat() {
 
     const handlePinMessage = async (chatRoomId, messageId, currentUser) => {
         try {
+            const currentMessages = messages.find(msg => msg.id === messageId)
+            const wasPinned = currentMessages?.is_pinned || false 
+            
             await chatAPI.pinMessage(chatRoomId, messageId)
-            console.log('Pinned Message Saved.')
-            //Refreshed pinned message
-
-            const systemMessageContent = `${currentUser.username} pinned a message to this channel. View all [pinned messages])`
-
-            const formData = new FormData()
-            formData.append('content', systemMessageContent)
-            await chatAPI.sendMessage(chatRoomId, formData)
-
+            
+            //Announcement for pinning message
+            if (!wasPinned) {
+                const systemMessageContent = `${currentUser.username} pinned a message to this channel. View all`   
+                const formData = new FormData()
+                formData.append('content', systemMessageContent)
+                await chatAPI.sendMessage(chatRoomId, formData)
+                }
             // Refresh pinned messages or chatroom messages
             await loadMessages(chatRoomId)
             // await loadPinnedMessages(chatRoomId)
@@ -716,7 +756,7 @@ function Chat() {
                                                             <button className='flex flex-row justify-between'>Copy Message <Copy size={20} /></button>
                                                             {isCurrentUser &&
                                                                 <button
-                                                                    onClick={() => {setMessageTarget(message), setWarningModalOpen(true)}}
+                                                                    onClick={() => {setMessageTarget(message), setWarningMode("delete"), setWarningModalOpen(true)}}
                                                                     className='flex flex-row justify-between'>Delete Message <Trash2 size={20} /></button>
                                                             }
 
@@ -760,7 +800,7 @@ function Chat() {
                                                     <CornerUpRight size={20} />
                                                     {message.sender.id === currentUser.id &&
                                                         <button
-                                                            onClick={() => {setMessageTarget(message), setWarningModalOpen(true)}}
+                                                            onClick={() => {setMessageTarget(message), setWarningMode("delete"), setWarningModalOpen(true)}}
                                                             className='text-red-500'
                                                         >
                                                             <Trash2 size={20} />
@@ -805,7 +845,7 @@ function Chat() {
                                                             :
                                                             (
                                                                 <p className={`mb-2 ${isHighlighted ? 'bg-yellow-300' : ''}`}>
-                                                                    {message.content}
+                                                                    {renderMessageContent(message.content)}
                                                                 </p>
                                                             )
                                                         }
@@ -1034,6 +1074,7 @@ function Chat() {
                 formatTime={formatTime}
                 speakMessage={speakMessage}
                 onJumpToMessage={handleJumpToMessage}
+                setWarningMode={setWarningMode}
             />
             <WarningModal
                 chatRoomId={chatRoomId}
@@ -1042,6 +1083,7 @@ function Chat() {
                 currentUser={currentUser}
                 message={messageTarget}
                 messageId={messageTarget?.id}
+                handlePinMessage={handlePinMessage}
                 handleDeleteMessage={handleDeleteMessage}
                 formatTime={formatTime}
                 mode={warningMode}
